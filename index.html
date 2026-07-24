@@ -914,8 +914,8 @@ async function enqueueSteal(victim, src, into){
                 'Content-Type':'application/json', Prefer:'return=minimal' },
       body: JSON.stringify({
         to_player: victim, game:'ana', kind:'steal',
-        title: `${myName} stole ${src.toUpperCase()}`,
-        body: `It just became ${into.toUpperCase()}. Steal it back?`,
+        title: `Anagrams · table ${Store.room || ''}`.trim(),
+        body: `${myName} stole ${src.toUpperCase()} — it's now ${into.toUpperCase()}.`,
         dedup: `steal-${src}-${into}`
       })
     });
