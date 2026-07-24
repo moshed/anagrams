@@ -43,6 +43,13 @@ GitHub Pages from `main` root). Deploy = edit `index.html` + `git push`.
   give up one of *their* words and its letters go **back to the middle**
   (`startPenalty` → `giveUpWord`). 20 s to choose or their shortest word is
   auto-picked. Nothing to lose if they have no words yet.
+- **Flip approval** (⋯ → Flip settings, stored in `state.settings`): a flip can
+  require a raw number of players or a percentage of them to ask
+  (`flipThreshold()`); asks are `state.flipVotes`, shown on the Flip button and
+  cleared whenever the table changes. Default is 1 = anyone flips instantly.
+- **Live source preview** (`previewMove()`): as you type, the claim box shows a
+  glowing mini-tile per letter taken from the middle and an orange chip for the
+  word you'd take, named with its owner. Makes "all of it or nothing" obvious.
 - **Winner** = most **tiles** (sum of word lengths), shown when anyone ends the
   game from the ⋯ menu (the bag counter tells you when it's empty).
 
@@ -66,7 +73,12 @@ GitHub Pages from `main` root). Deploy = edit `index.html` + `git push`.
   polling alone.
 - **Clock skew**: deadlines are absolute epoch ms, so every device syncs to the
   server's `Date` response header (`Store.noteTime` → `SKEW` → `nowS()`).
-  Never use raw `Date.now()` for anything shared.
+  Never use raw `Date.now()` for anything shared. The header only has 1-second
+  resolution, so a *correct* device would pick up ~1s of phantom skew and referee
+  a countdown early/late — `noteTime` therefore ignores offsets under 3s.
+- **A room row that vanishes is rebuilt** (`Store.missing` → `Store.reseat()`),
+  so housekeeping or a stray delete can't brick a game in progress.
+  ⚠️ Never run a bare `delete from public.ana_games` — scope it by `updated_at`.
 - **Refereeing expired timers** is done by *whichever* device notices first
   (`refereeTimers()` every 100 ms); the version check guarantees the penalty is
   applied exactly once.
@@ -74,10 +86,25 @@ GitHub Pages from `main` root). Deploy = edit `index.html` + `git push`.
 - **Solo practice** mode runs the identical engine with `Store.online = false`
   (mutations just apply locally) — handy for testing rules without a room.
 
-## Identity
-`ana_pid` (random) + `ana_name` in localStorage. No accounts. A joiner without a
-saved name gets the name dialog before being announced, so nobody shows up as
-"Player".
+## Identity & resume
+`ana_pid` (random) + `ana_name` in localStorage — the browser IS the account. No
+accounts, no passwords. A joiner without a saved name gets the name dialog before
+being announced, so nobody shows up as "Player".
+
+The home screen lists **your games** (`renderResume()` → `myGames()`): rooms this
+browser has played (`ana_rooms` in localStorage) merged with a server scan of the
+last 7 days for any room whose `state.players` still contains this player id. ⋯ →
+**My player ID** copies the id, or adopts one pasted from another device — that's
+how a game follows you between phone and laptop.
+
+## Layout rules that matter
+Opponents render 3-across **above** the table (`#playersTop`, wrapping past
+three), you render **below** it next to the buttons (`#playersBottom`). Word
+lists never scroll or clip — cards grow, the middle gives up height and
+`sizeTiles()` shrinks the tiles to fit. Past 8 words a card goes `.dense`.
+The claim sheet is hidden with `visibility/opacity`, **never `display:none`** —
+iOS won't focus an input that wasn't rendered at tap time, and that's the
+difference between the keyboard appearing instantly and not at all.
 
 ## Schema (already provisioned in Misc)
 ```sql
