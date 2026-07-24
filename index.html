@@ -596,7 +596,17 @@ async function doFlip(){
   }, { once:true });
 }
 
+/* The sheet opens SYNCHRONOUSLY on the tap — iOS only lets you focus an input
+   (and so raise the keyboard) inside the gesture, and one lost `await` costs
+   you the keyboard. We claim optimistically and undo if the table says no. */
 async function doClaim(){
+  const st0 = Store.state;
+  if(!st0 || st0.ended || st0.penalty || st0.claim){
+    if(st0 && st0.claim) toast((st0.claim.name || 'Someone') + ' called it first!');
+    return false;
+  }
+  openClaim();
+  Claim.pending = true;
   const ok = await Store.mutate(st=>{
     if(st.ended || st.penalty) return false;
     if(st.claim) return false;                        // someone shouted first
@@ -605,22 +615,28 @@ async function doClaim(){
                  start:nowS(), deadline:nowS() + CLAIM_START, len:0 };
     addLog(st, { type:'claim', pid:PLAYER_ID, name:st.players[PLAYER_ID].name });
   }, { once:true });
-  if(ok) openClaim();
-  else if(Store.state.claim) toast((Store.state.claim.name || 'Someone') + ' called it first!');
+  Claim.pending = false;
+  if(ok) Claim.deadline = Store.state.claim.deadline;   // adopt the table's clock
+  else{
+    closeClaim();
+    toast(Store.state.claim ? (Store.state.claim.name || 'Someone') + ' called it first!' : 'Too late!');
+  }
+  return ok;
 }
 
 /* the claiming player's local clock; pushed to the table (throttled) */
-const Claim = { open:false, deadline:0, maxLen:0, pushT:0 };
+const Claim = { open:false, pending:false, start:0, deadline:0, maxLen:0, pushT:0 };
 
 function openClaim(){
   Claim.open = true;
-  Claim.deadline = Store.state.claim.deadline;
+  Claim.deadline = (Store.state.claim && Store.state.claim.deadline) || (nowS() + CLAIM_START);
   Claim.maxLen = 0;
+  Claim.start = nowS();
   el('claimErr').textContent = '';
   const inp = el('claimInput');
   inp.value = '';
   el('claimSheet').classList.remove('hide');
-  setTimeout(()=>inp.focus(), 30);
+  inp.focus();                    // must stay in the tap gesture (iOS keyboard)
 }
 function closeClaim(){
   Claim.open = false;
@@ -845,8 +861,9 @@ function render(){
   if(st.ended && !el('overDlg').open) showStandings(st);
   if(!st.ended && el('overDlg').open) el('overDlg').close();
 
-  /* if someone stole my claim window away, close the sheet */
-  if(Claim.open && (!st.claim || st.claim.pid !== PLAYER_ID)) closeClaim();
+  /* if someone stole my claim window away, close the sheet
+     (but not while our own claim is still in flight) */
+  if(Claim.open && !Claim.pending && (!st.claim || st.claim.pid !== PLAYER_ID)) closeClaim();
 }
 
 function feedLine(l, st){
@@ -896,7 +913,7 @@ function showStandings(st){
 setInterval(()=>{
   const st = Store.state; if(!st) return;
   if(Claim.open){
-    const start = (st.claim && st.claim.start) || nowS();
+    const start = (st.claim && st.claim.start) || Claim.start || nowS();
     const span = Math.max(1, Claim.deadline - start);
     const left = Math.max(0, Claim.deadline - nowS());
     el('timerFill').style.width = (100 * left / span) + '%';
