@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Anagrams</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23134e33'/%3E%3Crect x='5' y='5' width='22' height='22' rx='3' fill='%23f2e3c2'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='18' font-weight='700' text-anchor='middle' fill='%231d1a12'%3EA%3C/text%3E%3C/svg%3E" />
+<meta name="description" content="Anagrams (Snatch) — flip tiles, shout words, steal your opponents' words. Play live with friends from any phone." />
+<meta name="theme-color" content="#0d3324" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Anagrams" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Anagrams" />
+<meta property="og:description" content="Flip tiles. Shout words. Steal theirs. Play live with friends." />
+<meta property="og:image" content="https://anagrams.dancykier.com/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:url" content="https://anagrams.dancykier.com/" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://anagrams.dancykier.com/og.png" />
+<style>
+  :root{
+    --felt:#0d3324; --felt2:#0a2a1e; --panel:#12402d; --panel2:#174c36;
+    --line:#1d5b41; --ink:#f2f6f3; --muted:#9dbdae;
+    --tile:#f4e6c6; --tile-edge:#d9c49b; --tile-ink:#201c12;
+    --gold:#f0c34a; --good:#4ade80; --bad:#ff6b6b; --steal:#ff9f45;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+  html{background:var(--felt)}
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, #17543a 0%, var(--felt) 55%, var(--felt2) 100%);
+    color:var(--ink);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-text-size-adjust:100%;
+    touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent}
+  input{font:inherit}
+  .wrap{height:100svh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+  /* ---------- generic bits ---------- */
+  .btn{
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn.primary{background:var(--gold);border-color:#c99f2c;color:#241c05}
+  .btn.ghost{background:transparent}
+  .row{display:flex;gap:8px;align-items:center}
+  .grow{flex:1}
+  .muted{color:var(--muted)}
+  .hide{display:none !important}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;gap:8px;padding:8px 12px 4px}
+  .logo{font-family:Georgia,"Times New Roman",serif;font-weight:700;letter-spacing:.5px;font-size:19px}
+  .logo b{color:var(--gold)}
+  .roomtag{
+    font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:2px;
+    background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 10px;cursor:pointer;
+  }
+  .iconbtn{background:transparent;border:0;font-size:20px;padding:6px 8px;cursor:pointer;line-height:1}
+
+  /* ---------- home ---------- */
+  #home{flex:1;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:18px;max-width:520px;margin:0 auto;width:100%}
+  .hero{text-align:center;margin-bottom:6px}
+  .hero h1{font-family:Georgia,serif;font-size:38px;margin:0 0 6px}
+  .hero h1 span{color:var(--gold)}
+  .hero p{margin:0;color:var(--muted)}
+  .card{background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .field{width:100%;background:#0b2a1e;border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--ink);outline:none}
+  .field:focus{border-color:var(--gold)}
+  .big{padding:14px;font-size:17px;width:100%}
+  .or{text-align:center;color:var(--muted);font-size:13px;margin:2px 0}
+  #joinCode{text-transform:uppercase;letter-spacing:4px;font-weight:700;text-align:center}
+
+  /* ---------- table ---------- */
+  #game{flex:1;display:flex;flex-direction:column;min-height:0}
+  #midWrap{
+    flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+    padding:6px 10px;position:relative;
+  }
+  #mid{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-content:center;overflow-y:auto;max-height:100%;padding:4px}
+  .tile{
+    width:var(--ts,46px);height:var(--ts,46px);border-radius:7px;
+    background:linear-gradient(#fbf1da,var(--tile));border:1px solid var(--tile-edge);
+    box-shadow:0 2px 0 #c9b083,0 3px 6px rgba(0,0,0,.35);
+    color:var(--tile-ink);display:flex;align-items:center;justify-content:center;
+    font:700 calc(var(--ts,46px) * .55)/1 Georgia,serif;user-select:none;
+  }
+  .tile.fresh{animation:pop .28s ease-out}
+  @keyframes pop{from{transform:scale(.3) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
+  .empty-mid{color:var(--muted);text-align:center;font-size:14px;padding:20px}
+
+  /* banner over the table */
+  .banner{
+    position:absolute;left:50%;top:8px;transform:translateX(-50%);
+    background:rgba(0,0,0,.55);border:1px solid var(--line);backdrop-filter:blur(6px);
+    padding:8px 14px;border-radius:999px;font-weight:700;font-size:14px;white-space:nowrap;
+  }
+  .banner.warn{border-color:var(--gold);color:var(--gold)}
+
+  /* feed */
+  #feed{height:22px;overflow:hidden;text-align:center;font-size:13px;color:var(--muted);padding:0 12px}
+  #feed b{color:var(--ink)}
+  #feed .w{color:var(--gold);font-weight:700;letter-spacing:.5px}
+
+  /* ---------- players ---------- */
+  #players{display:flex;gap:8px;overflow-x:auto;padding:6px 10px 8px;scrollbar-width:none}
+  #players::-webkit-scrollbar{display:none}
+  .pcard{
+    flex:0 0 auto;min-width:130px;max-width:210px;background:rgba(0,0,0,.24);
+    border:1px solid var(--line);border-radius:14px;padding:8px 10px;
+  }
+  .pcard.me{border-color:var(--gold);background:rgba(240,195,74,.09)}
+  .pcard.claiming{border-color:var(--good);box-shadow:0 0 0 2px rgba(74,222,128,.25)}
+  .phead{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:13px}
+  .pname{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ptiles{color:var(--gold);font-weight:700;font-size:12px;white-space:nowrap}
+  .pwords{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:88px;overflow-y:auto}
+  .chip{
+    background:var(--tile);color:var(--tile-ink);border-radius:5px;padding:2px 6px;
+    font:700 11px/1.35 Georgia,serif;letter-spacing:.6px;
+  }
+  .chip.new{animation:pop .3s ease-out}
+
+  /* ---------- controls ---------- */
+  #controls{display:flex;gap:8px;padding:6px 10px 12px}
+  #btnFlip{flex:0 0 34%;padding:16px 8px;font-weight:700;border-radius:14px;line-height:1.15}
+  #btnFlip small{display:block;font-weight:500;font-size:11px;opacity:.75}
+  #btnWord{
+    flex:1;padding:16px 8px;font-size:17px;font-weight:800;border-radius:14px;letter-spacing:.3px;
+    background:linear-gradient(#ffd15c,#eeb52c);border:1px solid #c2921f;color:#241c05;
+  }
+  #btnWord:disabled{background:var(--panel);border-color:var(--line);color:var(--muted)}
+
+  /* ---------- claim overlay ---------- */
+  .sheet{
+    position:fixed;inset:0;background:rgba(3,14,10,.78);backdrop-filter:blur(3px);
+    display:flex;align-items:flex-start;justify-content:center;padding:14vh 16px 16px;z-index:40;
+  }
+  .sheetbox{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px}
+  .sheetbox h3{margin:0 0 10px;font-size:17px}
+  #claimInput{
+    width:100%;text-transform:uppercase;letter-spacing:6px;font:800 26px/1.2 Georgia,serif;text-align:center;
+    background:#0b2a1e;border:2px solid var(--line);border-radius:12px;padding:14px 10px;color:var(--ink);outline:none;
+  }
+  #claimInput:focus{border-color:var(--gold)}
+  .timerbar{height:8px;border-radius:99px;background:#0b2a1e;overflow:hidden;margin:12px 0 6px}
+  .timerbar i{display:block;height:100%;background:var(--good);transition:width .1s linear}
+  .timerbar.low i{background:var(--bad)}
+  .clockrow{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+  #claimErr{min-height:18px;color:var(--bad);font-size:13px;text-align:center;margin-top:8px;font-weight:600}
+
+  /* ---------- dialogs ---------- */
+  dialog{
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    border-radius:18px;padding:0;max-width:min(94vw,460px);width:100%;
+  }
+  dialog::backdrop{background:rgba(3,14,10,.7)}
+  .dlg{padding:16px}
+  .dlg h3{margin:0 0 10px;font-size:18px}
+  .dlg p{margin:0 0 10px;color:var(--muted);font-size:14px}
+  .dlg ul{margin:0 0 12px;padding-left:18px;color:var(--muted);font-size:14px}
+  .dlg li{margin-bottom:6px}
+  .dlg li b{color:var(--ink)}
+  .menu{display:flex;flex-direction:column;gap:2px;padding:8px}
+  .menu button{background:transparent;border:0;text-align:left;padding:13px 14px;border-radius:10px;font-size:16px;cursor:pointer}
+  .menu button:active{background:var(--panel2)}
+  .pickwords{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .pickwords button{background:var(--tile);color:var(--tile-ink);border:1px solid var(--tile-edge);border-radius:8px;padding:8px 10px;font:700 14px/1 Georgia,serif;letter-spacing:1px;cursor:pointer}
+
+  /* ---------- toast ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    background:rgba(0,0,0,.82);border:1px solid var(--line);padding:10px 16px;border-radius:999px;
+    font-size:14px;font-weight:600;z-index:60;opacity:0;pointer-events:none;transition:opacity .18s;max-width:90vw;text-align:center;
+  }
+  #toast.on{opacity:1}
+
+  /* ---------- results ---------- */
+  .standing{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .standing:last-child{border-bottom:0}
+  .rank{width:26px;text-align:center;font-weight:800;color:var(--gold)}
+  .stiles{margin-left:auto;font-weight:800}
+
+  @media (max-height:680px){ .pwords{max-height:60px} .hero h1{font-size:32px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ HOME ============ -->
+  <div id="home">
+    <div class="hero">
+      <h1>Ana<span>grams</span></h1>
+      <p>Flip tiles. Shout words. Steal theirs.</p>
+    </div>
+
+    <div class="card">
+      <input id="nameInput" class="field big" placeholder="Your name" maxlength="14" autocomplete="off" />
+      <div style="height:10px"></div>
+      <button id="btnCreate" class="btn primary big">Start a game</button>
+      <div class="or">— or join one —</div>
+      <div class="row">
+        <input id="joinCode" class="field" placeholder="CODE" maxlength="4" autocomplete="off" autocapitalize="characters" />
+        <button id="btnJoin" class="btn">Join</button>
+      </div>
+    </div>
+
+    <div class="row" style="justify-content:center">
+      <button id="btnHelpHome" class="btn ghost">How to play</button>
+      <button id="btnSolo" class="btn ghost">Practice solo</button>
+    </div>
+    <p class="muted" style="text-align:center;font-size:12px;margin:0">Everyone plays on their own phone, one shared table.</p>
+  </div>
+
+  <!-- ============ GAME ============ -->
+  <div id="game" class="hide">
+    <header>
+      <div class="logo">Ana<b>grams</b></div>
+      <div class="grow"></div>
+      <button id="roomTag" class="roomtag">····</button>
+      <button id="btnMenu" class="iconbtn">⋯</button>
+    </header>
+
+    <div id="midWrap">
+      <div id="mid"></div>
+      <div id="banner" class="banner hide"></div>
+    </div>
+
+    <div id="feed"></div>
+    <div id="players"></div>
+
+    <div id="controls">
+      <button id="btnFlip" class="btn">Flip<small id="bagLeft">144 left</small></button>
+      <button id="btnWord">I HAVE A WORD!</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CLAIM SHEET ============ -->
+<div id="claimSheet" class="sheet hide">
+  <div class="sheetbox">
+    <h3>Type it — fast!</h3>
+    <input id="claimInput" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
+    <div class="timerbar"><i id="timerFill" style="width:100%"></i></div>
+    <div class="clockrow"><span id="clockTxt">5.0s</span><span class="muted">+2s per letter</span></div>
+    <div id="claimErr"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnGiveUp" class="btn ghost grow">Give up</button>
+      <button id="btnSubmit" class="btn primary grow">Enter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DIALOGS ============ -->
+<dialog id="menuDlg"><div class="menu">
+  <button data-act="share">Invite players (copy link)</button>
+  <button data-act="rename">Change my name</button>
+  <button data-act="help">How to play</button>
+  <button data-act="end">End game &amp; show scores</button>
+  <button data-act="leave">Leave game</button>
+  <button data-act="close" class="muted">Close</button>
+</div></dialog>
+
+<dialog id="helpDlg"><div class="dlg">
+  <h3>How to play</h3>
+  <ul>
+    <li><b>Flip</b> a tile to add a letter to the middle.</li>
+    <li>See a word? Hit <b>I HAVE A WORD!</b> first — it locks everyone else out while you type it.</li>
+    <li>Words must be <b>4+ letters</b>.</li>
+    <li>Build it from middle letters, <b>or steal</b> a word already on the table: use <b>all</b> its letters plus <b>at least one</b> from the middle.</li>
+    <li>A steal must <b>change the root</b>. Just adding S, ES, ED, ING, ER or EST doesn't count (CAT → CATS ✗, CARE → RACER ✓).</li>
+    <li><b>Miss and you pay:</b> if your word is bad or the clock runs out, you give up one of your own words — its letters go back to the middle.</li>
+    <li>You get <b>5 seconds</b> to start typing, and <b>+2 seconds</b> for every letter you type.</li>
+    <li>Bag empties, game ends — <b>most tiles wins</b>.</li>
+  </ul>
+  <button class="btn primary big" onclick="helpDlg.close()">Got it</button>
+</div></dialog>
+
+<dialog id="nameDlg"><div class="dlg">
+  <h3>Your name</h3>
+  <input id="nameField" class="field big" maxlength="14" placeholder="Name" autocomplete="off" />
+  <div style="height:10px"></div>
+  <button id="nameSave" class="btn primary big">Save</button>
+</div></dialog>
+
+<dialog id="penaltyDlg"><div class="dlg">
+  <h3>Ouch — pick a word to lose</h3>
+  <p id="penaltyWhy">Your letters go back to the middle.</p>
+  <div id="penaltyWords" class="pickwords"></div>
+  <p class="muted" id="penaltyClock" style="font-size:12px;margin:0"></p>
+</div></dialog>
+
+<dialog id="overDlg"><div class="dlg">
+  <h3>Final scores</h3>
+  <div id="standings"></div>
+  <div style="height:12px"></div>
+  <button id="btnAgain" class="btn primary big">Play again</button>
+</div></dialog>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   Anagrams (a.k.a. Snatch / Word Stealing)
+   One shared table, every player on their own device.
+
+   Shared state lives in ONE Postgres row per room:
+     public.ana_games(room text pk, state jsonb, version int)
+   Every mutation is an optimistic, version-checked UPDATE
+   (`...&version=eq.N`). If someone beat us to it the update
+   matches 0 rows, we re-pull and retry — that's what makes
+   "who called the word first" resolve consistently for all.
+   ============================================================ */
+
+const SUPABASE_URL      = "https://atqhfbaurrmivjarowco.supabase.co";   // Misc project
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0cWhmYmF1cnJtaXZqYXJvd2NvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzODc2ODgsImV4cCI6MjA5NTk2MzY4OH0.buWqvUnwid4QEE6m9OFM7n1tu51mcogTc01oG7pdtJI";
+const TABLE = "ana_games";
+const REST  = SUPABASE_URL + "/rest/v1/" + TABLE;
+
+const MIN_LEN      = 4;
+const CLAIM_START  = 5000;   // ms you get to start typing
+const CLAIM_PER    = 2000;   // ms added per letter typed
+const CLAIM_CAP    = 30000;  // hard ceiling on one claim
+const PENALTY_MS   = 20000;  // time to pick the word you lose
+const FLIP_COOLDOWN= 500;
+const POLL_MS      = 1500;
+
+/* Bananagrams tile distribution — 144 tiles. */
+const TILE_COUNTS = {A:13,B:3,C:3,D:6,E:18,F:3,G:4,H:3,I:12,J:2,K:2,L:5,M:3,N:8,O:11,P:3,
+                     Q:2,R:9,S:6,T:9,U:6,V:3,W:3,X:2,Y:3,Z:2};
+
+/* ---------- tiny helpers ---------- */
+const $  = s => document.querySelector(s);
+const el = id => document.getElementById(id);
+const clone = o => JSON.parse(JSON.stringify(o));
+const uid = () => Math.random().toString(36).slice(2,10);
+let toastT = null;
+function toast(msg, ms=2000){
+  const t = el('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), ms);
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* server-time (so every device counts the same clock) */
+let SKEW = 0;
+const nowS = () => Date.now() + SKEW;
+
+/* identity */
+const PLAYER_ID = (()=>{ let v = localStorage.getItem('ana_pid'); if(!v){ v = uid()+uid(); localStorage.setItem('ana_pid', v);} return v; })();
+let MY_NAME = localStorage.getItem('ana_name') || '';
+
+/* ============================================================
+   Dictionary
+   ============================================================ */
+const DICT = { set:null, loading:null };
+async function loadDict(){
+  if(DICT.set) return DICT.set;
+  if(DICT.loading) return DICT.loading;
+  DICT.loading = (async ()=>{
+    const urls = ['words.json',
+                  'https://cdn.jsdelivr.net/gh/moshed/spellingbee@main/words.json'];
+    for(const u of urls){
+      try{
+        const r = await fetch(u); if(!r.ok) continue;
+        const arr = await r.json();
+        const s = new Set();
+        for(const w of arr) if(w.length >= MIN_LEN && /^[a-z]+$/.test(w)) s.add(w);
+        if(s.size > 1000){ DICT.set = s; return s; }
+      }catch(e){}
+    }
+    DICT.set = new Set();   // dictionary unreachable: everything gets rejected, so warn
+    toast('Word list failed to load — reload the page', 4000);
+    return DICT.set;
+  })();
+  return DICT.loading;
+}
+const isWord = w => DICT.set && DICT.set.has(w.toLowerCase());
+
+/* ============================================================
+   Letter maths
+   ============================================================ */
+function counts(letters){
+  const c = {};
+  const arr = typeof letters === 'string' ? letters.split('') : letters;
+  for(const ch of arr) c[ch] = (c[ch]||0) + 1;
+  return c;
+}
+function subset(a, b){                       // every letter of a available in b
+  for(const k in a) if((b[k]||0) < a[k]) return false;
+  return true;
+}
+function minus(a, b){                        // a - b (assumes subset)
+  const o = {};
+  for(const k in a){ const n = a[k] - (b[k]||0); if(n > 0) o[k] = n; }
+  return o;
+}
+function spread(c){                          // {A:2,B:1} -> ['A','A','B']
+  const out = [];
+  for(const k in c) for(let i=0;i<c[k];i++) out.push(k);
+  return out;
+}
+const total = c => Object.values(c).reduce((s,n)=>s+n,0);
+
+/* ---------- "did the root really change?" ----------
+   We block the pure inflections: plural, verb tense/-ing, and
+   comparative/superlative. Anything that needs a different stem
+   is a fair steal. Handles the usual spelling wrinkles:
+   e-drop (bake→baked), doubling (run→running), y→i (city→cities). */
+const INFLECTIONS = ['ies','ied','iest','ier','ings','ers','est','ing','ies','es','ed','er','en','s','d','n'];
+function stems(w){
+  const out = new Set([w]);
+  for(const suf of INFLECTIONS){
+    if(!w.endsWith(suf)) continue;
+    const base = w.slice(0, w.length - suf.length);
+    if(base.length < 2) continue;
+    out.add(base);
+    out.add(base + 'e');                                  // hoping→hope, baked→bake
+    if(/(.)\1$/.test(base)) out.add(base.slice(0,-1));    // running→run, batted→bat
+    if(suf[0] === 'i') out.add(base + 'y');               // cities→city, happier→happy
+  }
+  return out;
+}
+function sameRoot(a, b){
+  a = a.toLowerCase(); b = b.toLowerCase();
+  if(a === b) return true;
+  const A = stems(a), B = stems(b);
+  for(const s of A) if(B.has(s)) return true;
+  return false;
+}
+
+/* ============================================================
+   Game state (the jsonb blob) + rules
+   ============================================================ */
+function shuffledBag(){
+  const bag = [];
+  for(const L in TILE_COUNTS) for(let i=0;i<TILE_COUNTS[L];i++) bag.push(L);
+  for(let i=bag.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [bag[i],bag[j]] = [bag[j],bag[i]]; }
+  return bag;
+}
+function freshState(){
+  return { v:1, started:true, ended:false, bag:shuffledBag(), mid:[],
+           players:{}, order:[], claim:null, penalty:null, lastFlip:0, log:[], seq:0 };
+}
+function addLog(st, entry){
+  st.seq = (st.seq||0) + 1;
+  st.log.push(Object.assign({ id:st.seq, t:nowS() }, entry));
+  if(st.log.length > 40) st.log.splice(0, st.log.length - 40);
+}
+const tilesOf = p => p.words.reduce((s,w)=> s + w.w.length, 0);
+
+/* Find the best legal way to make `word` right now.
+   Returns {type:'new'} | {type:'steal',from,src,uses} | {bad:'reason'} */
+function findMove(word, st){
+  const w = word.toUpperCase();
+  if(w.length < MIN_LEN) return { bad:'Words must be at least ' + MIN_LEN + ' letters' };
+  if(!/^[A-Z]+$/.test(w)) return { bad:'Letters only' };
+  if(!isWord(w)) return { bad:'"' + w + '" is not in the word list' };
+
+  const mid = counts(st.mid), wc = counts(w);
+  if(subset(wc, mid)) return { type:'new' };
+
+  let best = null, rootBlocked = null;
+  for(const pid of st.order){
+    const p = st.players[pid]; if(!p) continue;
+    for(const entry of p.words){
+      const src = entry.w, sc = counts(src);
+      if(src.length >= w.length) continue;              // must grow
+      if(!subset(sc, wc)) continue;                     // must use ALL its letters
+      const need = minus(wc, sc);
+      if(total(need) < 1) continue;                     // must add from the middle
+      if(!subset(need, mid)) continue;
+      if(sameRoot(src, w)){ rootBlocked = rootBlocked || src; continue; }
+      const cand = { type:'steal', from:pid, src, uses:spread(need) };
+      if(!best || src.length > best.src.length) best = cand;   // biggest steal wins
+    }
+  }
+  if(best) return best;
+  if(rootBlocked) return { bad:'"' + w + '" is just a form of ' + rootBlocked + ' — change the root' };
+  return { bad:"You can't make \"" + w + '" from the middle or a word on the table' };
+}
+
+/* ============================================================
+   Store — local state + optimistic sync
+   ============================================================ */
+const Store = {
+  room:null, state:null, version:0, online:false, sb:null, channel:null,
+
+  local(st){ this.room = null; this.online = false; this.state = st; this.version = 0; render(); },
+
+  headers(extra){
+    return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY,
+                           'Content-Type':'application/json' }, extra||{});
+  },
+  noteTime(res){
+    const d = res.headers.get('date');
+    if(d){ const t = Date.parse(d); if(t) SKEW = t - Date.now(); }
+  },
+
+  async create(room, st){
+    const res = await fetch(REST, { method:'POST', headers:this.headers({Prefer:'return=representation'}),
+                                    body:JSON.stringify({ room, state:st, version:1 }) });
+    if(!res.ok) throw new Error('create failed: ' + res.status);
+    this.noteTime(res);
+    const [row] = await res.json();
+    this.room = room; this.state = row.state; this.version = row.version; this.online = true;
+    return row;
+  },
+
+  async pull(){
+    if(!this.online) return this.state;
+    const res = await fetch(REST + '?room=eq.' + encodeURIComponent(this.room) + '&select=state,version',
+                            { headers:this.headers() });
+    if(!res.ok) return this.state;
+    this.noteTime(res);
+    const [row] = await res.json();
+    if(!row) return this.state;
+    if(row.version >= this.version){ this.state = row.state; this.version = row.version; }
+    return this.state;
+  },
+
+  /* Apply `fn(state)` and push it. fn returns false to abort.
+     Retries on a version clash — losing the race is normal here. */
+  async mutate(fn, opts){
+    opts = opts || {};
+    for(let attempt=0; attempt<7; attempt++){
+      const next = clone(this.state);
+      let out;
+      try{ out = fn(next); }catch(e){ console.error(e); return false; }
+      if(out === false){ render(); return false; }
+
+      if(!this.online){ this.state = next; this.version++; render(); return true; }
+
+      const res = await fetch(REST + '?room=eq.' + encodeURIComponent(this.room) + '&version=eq.' + this.version,
+        { method:'PATCH', headers:this.headers({Prefer:'return=representation'}),
+          body:JSON.stringify({ state:next, version:this.version+1, updated_at:new Date().toISOString() }) });
+      if(res.ok){
+        this.noteTime(res);
+        const rows = await res.json();
+        if(rows.length){ this.state = rows[0].state; this.version = rows[0].version; render(); return true; }
+      }
+      await this.pull();                 // someone got in first — re-read and try again
+      render();
+      if(opts.once) return false;
+    }
+    toast('Table is busy — try again');
+    return false;
+  },
+
+  async connect(room){
+    this.room = room; this.online = true;
+    await this.pull();
+    try{
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+      this.sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { realtime:{ params:{ eventsPerSecond:10 } } });
+      this.channel = this.sb.channel('ana:'+room)
+        .on('postgres_changes', { event:'*', schema:'public', table:TABLE, filter:'room=eq.'+room }, payload=>{
+          const r = payload.new;
+          if(r && r.version > this.version){ this.state = r.state; this.version = r.version; render(); }
+        }).subscribe();
+    }catch(e){ /* realtime unavailable — polling still keeps us live */ }
+  }
+};
+
+/* ============================================================
+   Actions
+   ============================================================ */
+function myPlayer(st){ return (st && st.players[PLAYER_ID]) || null; }
+
+function joinState(st){
+  if(!st.players[PLAYER_ID]){
+    st.players[PLAYER_ID] = { name:MY_NAME || 'Player', words:[], joined:nowS() };
+    st.order.push(PLAYER_ID);
+    addLog(st, { type:'join', pid:PLAYER_ID, name:MY_NAME || 'Player' });
+  }else if(st.players[PLAYER_ID].name !== MY_NAME && MY_NAME){
+    st.players[PLAYER_ID].name = MY_NAME;
+  }
+}
+
+async function doFlip(){
+  await Store.mutate(st=>{
+    if(st.ended || st.claim || st.penalty) return false;
+    if(!st.bag.length) return false;
+    if(nowS() - (st.lastFlip||0) < FLIP_COOLDOWN) return false;
+    const L = st.bag.pop();
+    st.mid.push(L);
+    st.lastFlip = nowS();
+    addLog(st, { type:'flip', letter:L });
+  }, { once:true });
+}
+
+async function doClaim(){
+  const ok = await Store.mutate(st=>{
+    if(st.ended || st.penalty) return false;
+    if(st.claim) return false;                        // someone shouted first
+    if(!st.players[PLAYER_ID]) joinState(st);
+    st.claim = { pid:PLAYER_ID, name:st.players[PLAYER_ID].name,
+                 start:nowS(), deadline:nowS() + CLAIM_START, len:0 };
+    addLog(st, { type:'claim', pid:PLAYER_ID, name:st.players[PLAYER_ID].name });
+  }, { once:true });
+  if(ok) openClaim();
+  else if(Store.state.claim) toast((Store.state.claim.name || 'Someone') + ' called it first!');
+}
+
+/* the claiming player's local clock; pushed to the table (throttled) */
+const Claim = { open:false, deadline:0, maxLen:0, pushT:0 };
+
+function openClaim(){
+  Claim.open = true;
+  Claim.deadline = Store.state.claim.deadline;
+  Claim.maxLen = 0;
+  el('claimErr').textContent = '';
+  const inp = el('claimInput');
+  inp.value = '';
+  el('claimSheet').classList.remove('hide');
+  setTimeout(()=>inp.focus(), 30);
+}
+function closeClaim(){
+  Claim.open = false;
+  el('claimSheet').classList.add('hide');
+  el('claimInput').blur();
+}
+
+function onClaimType(){
+  if(!Claim.open) return;
+  const v = el('claimInput').value.replace(/[^a-zA-Z]/g,'').toUpperCase();
+  el('claimInput').value = v;
+  if(v.length > Claim.maxLen){
+    const added = v.length - Claim.maxLen;
+    Claim.maxLen = v.length;
+    const start = (Store.state.claim && Store.state.claim.start) || nowS();
+    Claim.deadline = Math.min(Claim.deadline + added*CLAIM_PER, start + CLAIM_CAP);
+    pushDeadline();
+  }
+}
+/* let the other devices see the extended clock, but don't spam the DB */
+function pushDeadline(){
+  if(!Store.online) return;
+  const t = nowS();
+  if(t - Claim.pushT < 600) return;
+  Claim.pushT = t;
+  const dl = Claim.deadline, len = Claim.maxLen;
+  Store.mutate(st=>{
+    if(!st.claim || st.claim.pid !== PLAYER_ID) return false;
+    st.claim.deadline = dl; st.claim.len = len;
+  }, { once:true });
+}
+
+async function submitWord(){
+  if(!Claim.open) return;
+  const w = el('claimInput').value.replace(/[^a-zA-Z]/g,'').toUpperCase();
+  if(!w) return;
+  if(nowS() > Claim.deadline + 400){ return; }         // the ticker will penalise us
+  const move = findMove(w, Store.state);
+  if(move.bad){
+    el('claimErr').textContent = move.bad;
+    el('claimInput').select();
+    return;
+  }
+  closeClaim();
+  const ok = await Store.mutate(st=>{
+    if(!st.claim || st.claim.pid !== PLAYER_ID) return false;      // clock ran out / stolen
+    const m = findMove(w, st);                                     // re-check on the FRESH table
+    if(m.bad){ st.claim = null; startPenalty(st, PLAYER_ID, m.bad); return; }
+    const mid = counts(st.mid);
+    let used;
+    if(m.type === 'new'){ used = spread(counts(w)); }
+    else{
+      used = m.uses;
+      const owner = st.players[m.from];
+      const i = owner.words.findIndex(x => x.w === m.src);
+      if(i < 0) return false;
+      owner.words.splice(i,1);
+    }
+    for(const L of used){                                          // take the tiles off the table
+      const i = st.mid.indexOf(L);
+      if(i >= 0) st.mid.splice(i,1);
+    }
+    st.players[PLAYER_ID].words.push({ w, at:nowS() });
+    st.claim = null;
+    addLog(st, m.type === 'new'
+      ? { type:'word', pid:PLAYER_ID, name:st.players[PLAYER_ID].name, word:w }
+      : { type:'steal', pid:PLAYER_ID, name:st.players[PLAYER_ID].name, word:w,
+          from:m.from, fromName:(st.players[m.from]||{}).name, src:m.src });
+  });
+  if(ok && Store.state.penalty && Store.state.penalty.pid === PLAYER_ID) toast('Too slow — the table changed!');
+}
+
+function startPenalty(st, pid, why){
+  const p = st.players[pid];
+  addLog(st, { type:'miss', pid, name:(p&&p.name)||'Player', why:why||'' });
+  if(!p || !p.words.length) return;                     // nothing to lose
+  st.penalty = { pid, deadline:nowS() + PENALTY_MS, why:why||'' };
+}
+
+async function giveUpWord(word){
+  await Store.mutate(st=>{
+    if(!st.penalty || st.penalty.pid !== PLAYER_ID) return false;
+    const p = st.players[PLAYER_ID];
+    const i = p.words.findIndex(x => x.w === word);
+    if(i < 0) return false;
+    const [lost] = p.words.splice(i,1);
+    for(const L of lost.w.split('')) st.mid.push(L);    // letters go back to the middle
+    st.penalty = null;
+    addLog(st, { type:'lost', pid:PLAYER_ID, name:p.name, word:lost.w });
+  });
+}
+
+async function abandonClaim(){
+  closeClaim();
+  await Store.mutate(st=>{
+    if(!st.claim || st.claim.pid !== PLAYER_ID) return false;
+    st.claim = null;
+    startPenalty(st, PLAYER_ID, 'gave up');
+  });
+}
+
+/* Any device can referee an expired clock — the version check makes
+   sure exactly one of them lands it. */
+async function refereeTimers(){
+  const st = Store.state; if(!st) return;
+  if(st.claim && nowS() > st.claim.deadline + 250){
+    if(st.claim.pid === PLAYER_ID) closeClaim();
+    await Store.mutate(s=>{
+      if(!s.claim || s.claim.start !== st.claim.start) return false;
+      const pid = s.claim.pid;
+      s.claim = null;
+      startPenalty(s, pid, 'ran out of time');
+    }, { once:true });
+    return;
+  }
+  if(st.penalty && nowS() > st.penalty.deadline){
+    await Store.mutate(s=>{
+      if(!s.penalty || s.penalty.pid !== st.penalty.pid) return false;
+      const p = s.players[s.penalty.pid];
+      if(p && p.words.length){                          // auto-pick their shortest word
+        let i = 0;
+        p.words.forEach((x,k)=>{ if(x.w.length < p.words[i].w.length) i = k; });
+        const [lost] = p.words.splice(i,1);
+        for(const L of lost.w.split('')) s.mid.push(L);
+        addLog(s, { type:'lost', pid:s.penalty.pid, name:p.name, word:lost.w });
+      }
+      s.penalty = null;
+    }, { once:true });
+  }
+}
+
+async function endGame(){
+  await Store.mutate(st=>{ if(st.ended) return false; st.ended = true; st.claim = null; st.penalty = null;
+                           addLog(st, { type:'end' }); });
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+let lastMidLen = 0, lastLogId = 0, lastWordKey = '';
+
+function render(){
+  const st = Store.state;
+  if(!st) return;
+
+  /* middle */
+  const mid = el('mid');
+  const key = st.mid.join('') + '|' + (st.ended?1:0);
+  if(mid.dataset.key !== key){
+    const grown = st.mid.length > lastMidLen;
+    mid.dataset.key = key;
+    mid.innerHTML = st.mid.length
+      ? st.mid.map((L,i)=> '<div class="tile' + (grown && i === st.mid.length-1 ? ' fresh' : '') + '">' + L + '</div>').join('')
+      : '<div class="empty-mid">Middle is empty — hit <b>Flip</b> to turn a tile.</div>';
+    sizeTiles();
+    lastMidLen = st.mid.length;
+  }
+
+  /* banner: whose claim / penalty */
+  const b = el('banner');
+  if(st.penalty){
+    const nm = (st.players[st.penalty.pid]||{}).name || 'Player';
+    b.className = 'banner warn';
+    b.textContent = (st.penalty.pid === PLAYER_ID ? 'You missed' : nm + ' missed') + ' — losing a word…';
+  }else if(st.claim && st.claim.pid !== PLAYER_ID){
+    b.className = 'banner warn';
+    b.textContent = '🔔 ' + (st.claim.name||'Someone') + ' has a word…';
+  }else if(st.ended){
+    b.className = 'banner';
+    b.textContent = 'Game over';
+  }else{
+    b.className = 'banner hide';
+  }
+
+  /* feed */
+  const last = st.log[st.log.length-1];
+  if(last && last.id !== lastLogId){ lastLogId = last.id; el('feed').innerHTML = feedLine(last, st); }
+
+  /* players */
+  const wordKey = st.order.map(p=> (st.players[p]||{name:''}).name + ':' + (st.players[p]?st.players[p].words.map(w=>w.w).join(','):'')).join('|')
+                  + '|' + (st.claim ? st.claim.pid : '');
+  if(wordKey !== lastWordKey){
+    lastWordKey = wordKey;
+    const ids = st.order.slice().sort((a,b)=> (a===PLAYER_ID?-1:b===PLAYER_ID?1:0));
+    el('players').innerHTML = ids.map(pid=>{
+      const p = st.players[pid]; if(!p) return '';
+      const cls = 'pcard' + (pid===PLAYER_ID?' me':'') + (st.claim && st.claim.pid===pid?' claiming':'');
+      const words = p.words.slice().sort((a,b)=> b.at - a.at)
+        .map(w=> '<span class="chip">' + w.w + '</span>').join('');
+      return '<div class="' + cls + '">' +
+               '<div class="phead"><span class="pname">' + esc(p.name||'Player') + (pid===PLAYER_ID?' (you)':'') + '</span>' +
+               '<span class="ptiles">' + tilesOf(p) + '</span></div>' +
+               '<div class="pwords">' + (words || '<span class="muted" style="font-size:11px">no words yet</span>') + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  /* controls */
+  const busy = !!(st.claim || st.penalty) || st.ended;
+  el('btnFlip').disabled = busy || !st.bag.length;
+  el('bagLeft').textContent = st.bag.length ? st.bag.length + ' left' : 'bag empty';
+  const wb = el('btnWord');
+  wb.disabled = busy;
+  wb.textContent = st.ended ? 'GAME OVER'
+                 : st.penalty ? 'PAYING A PENALTY…'
+                 : st.claim ? (st.claim.pid===PLAYER_ID ? 'TYPE IT!' : (st.claim.name||'…') + ' HAS IT')
+                 : 'I HAVE A WORD!';
+  el('roomTag').textContent = Store.online ? (Store.room||'····') : 'SOLO';
+
+  /* penalty dialog for me */
+  const pen = st.penalty;
+  const dlg = el('penaltyDlg');
+  if(pen && pen.pid === PLAYER_ID && myPlayer(st) && myPlayer(st).words.length){
+    if(!dlg.open){
+      el('penaltyWhy').textContent = (pen.why ? pen.why + '. ' : '') + 'Pick a word to give up — its letters go back to the middle.';
+      el('penaltyWords').innerHTML = myPlayer(st).words.map(w=> '<button data-w="' + w.w + '">' + w.w + '</button>').join('');
+      dlg.showModal();
+    }
+  }else if(dlg.open) dlg.close();
+
+  /* end screen */
+  if(st.ended && !el('overDlg').open) showStandings(st);
+  if(!st.ended && el('overDlg').open) el('overDlg').close();
+
+  /* if someone stole my claim window away, close the sheet */
+  if(Claim.open && (!st.claim || st.claim.pid !== PLAYER_ID)) closeClaim();
+}
+
+function feedLine(l, st){
+  switch(l.type){
+    case 'word':  return '<b>' + esc(l.name) + '</b> made <span class="w">' + l.word + '</span>';
+    case 'steal': return '<b>' + esc(l.name) + '</b> stole ' + esc(l.src) + ' → <span class="w">' + l.word + '</span>' +
+                         (l.fromName ? ' from <b>' + esc(l.fromName) + '</b>' : '');
+    case 'miss':  return '<b>' + esc(l.name) + '</b> missed' + (l.why ? ' — ' + esc(l.why) : '');
+    case 'lost':  return '<b>' + esc(l.name) + '</b> gave up ' + esc(l.word);
+    case 'join':  return '<b>' + esc(l.name) + '</b> joined';
+    case 'claim': return '<b>' + esc(l.name) + '</b> called a word…';
+    case 'end':   return 'Game over';
+    default:      return st.mid.length ? '' : '';
+  }
+}
+
+/* tiles shrink so the middle always fits without scrolling on a phone */
+function sizeTiles(){
+  const n = Store.state ? Store.state.mid.length : 0;
+  const w = el('midWrap').clientWidth  - 20;
+  const h = el('midWrap').clientHeight - 20;
+  if(!n || w <= 0 || h <= 0) return;
+  let size = 54;
+  for(; size > 20; size -= 2){
+    const per = Math.max(1, Math.floor(w / (size + 6)));
+    const rows = Math.ceil(n / per);
+    if(rows * (size + 6) <= h) break;
+  }
+  el('mid').style.setProperty('--ts', size + 'px');
+}
+window.addEventListener('resize', ()=>{ sizeTiles(); });
+
+function showStandings(st){
+  const rows = st.order.map(pid=>({ p:st.players[pid], t:tilesOf(st.players[pid]||{words:[]}) }))
+                       .filter(r=>r.p).sort((a,b)=> b.t - a.t);
+  el('standings').innerHTML = rows.map((r,i)=>
+    '<div class="standing"><span class="rank">' + (i===0 ? '🏆' : (i+1)) + '</span>' +
+    '<span>' + esc(r.p.name||'Player') + '</span>' +
+    '<span class="stiles">' + r.t + ' tiles</span></div>' +
+    '<div class="muted" style="font-size:12px;padding:0 0 6px 36px">' +
+      (r.p.words.map(w=>w.w).join(' · ') || '—') + '</div>'
+  ).join('');
+  el('overDlg').showModal();
+}
+
+/* the 10fps clock for claim / penalty countdowns */
+setInterval(()=>{
+  const st = Store.state; if(!st) return;
+  if(Claim.open){
+    const start = (st.claim && st.claim.start) || nowS();
+    const span = Math.max(1, Claim.deadline - start);
+    const left = Math.max(0, Claim.deadline - nowS());
+    el('timerFill').style.width = (100 * left / span) + '%';
+    el('clockTxt').textContent = (left/1000).toFixed(1) + 's';
+    el('timerFill').parentElement.classList.toggle('low', left < 2000);
+  }
+  if(st.claim && st.claim.pid !== PLAYER_ID){
+    const left = Math.max(0, st.claim.deadline - nowS());
+    el('banner').textContent = '🔔 ' + (st.claim.name||'Someone') + ' has a word… ' + (left/1000).toFixed(1) + 's';
+  }
+  if(st.penalty && st.penalty.pid === PLAYER_ID){
+    const left = Math.max(0, st.penalty.deadline - nowS());
+    el('penaltyClock').textContent = 'Auto-picks your shortest word in ' + Math.ceil(left/1000) + 's';
+  }
+  refereeTimers();
+}, 100);
+
+/* polling safety net — realtime is great until a phone's network isn't */
+setInterval(async ()=>{
+  if(!Store.online || !Store.room) return;
+  const before = Store.version;
+  await Store.pull();
+  if(Store.version !== before) render();
+}, POLL_MS);
+
+/* ============================================================
+   Wiring
+   ============================================================ */
+function roomCode(){
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';                 // no I/O — they read as 1/0
+  return Array.from({length:4}, ()=> A[Math.floor(Math.random()*A.length)]).join('');
+}
+function shareLink(){ return location.origin + location.pathname + '#r=' + Store.room; }
+
+function showGame(){ el('home').classList.add('hide'); el('game').classList.remove('hide'); setTimeout(sizeTiles, 50); }
+
+async function createGame(){
+  MY_NAME = (el('nameInput').value || '').trim().slice(0,14) || 'Player';
+  localStorage.setItem('ana_name', MY_NAME);
+  await loadDict();
+  const st = freshState();
+  joinState(st);
+  for(let i=0;i<4;i++){                                  // retry on a code collision
+    const code = roomCode();
+    try{ await Store.create(code, st); break; }
+    catch(e){ if(i===3){ toast('Could not reach the table — playing solo'); Store.local(st); } }
+  }
+  if(Store.online){ location.hash = 'r=' + Store.room; await Store.connect(Store.room); }
+  showGame(); render();
+  if(Store.online) copyLink(true);
+}
+
+async function joinGame(code){
+  code = (code||'').trim().toUpperCase();
+  if(code.length !== 4) return toast('Enter the 4-letter code');
+  MY_NAME = (el('nameInput').value || '').trim().slice(0,14) || MY_NAME || 'Player';
+  localStorage.setItem('ana_name', MY_NAME);
+  await loadDict();
+  Store.room = code; Store.online = true;
+  await Store.pull();
+  if(!Store.state) return toast('No game with code ' + code);
+  location.hash = 'r=' + code;
+  await Store.connect(code);
+  await Store.mutate(joinState);
+  showGame(); render();
+}
+
+async function copyLink(quiet){
+  const link = shareLink();
+  try{ await navigator.clipboard.writeText(link); toast(quiet ? 'Game ' + Store.room + ' — invite link copied' : 'Invite link copied'); }
+  catch(e){ prompt('Share this link:', link); }
+}
+
+el('btnCreate').onclick = createGame;
+el('btnJoin').onclick   = ()=> joinGame(el('joinCode').value);
+el('joinCode').addEventListener('keydown', e=>{ if(e.key === 'Enter') joinGame(el('joinCode').value); });
+el('btnHelpHome').onclick = ()=> el('helpDlg').showModal();
+el('btnSolo').onclick = async ()=>{
+  MY_NAME = (el('nameInput').value || '').trim().slice(0,14) || 'You';
+  localStorage.setItem('ana_name', MY_NAME);
+  await loadDict();
+  const st = freshState(); joinState(st);
+  Store.local(st); showGame(); render();
+};
+
+el('btnFlip').onclick = doFlip;
+el('btnWord').onclick = doClaim;
+el('roomTag').onclick = ()=> Store.online ? copyLink() : toast('Solo practice — no room');
+el('btnMenu').onclick = ()=> el('menuDlg').showModal();
+
+el('menuDlg').addEventListener('click', e=>{
+  const act = e.target.dataset && e.target.dataset.act; if(!act) return;
+  el('menuDlg').close();
+  if(act === 'share')  return Store.online ? copyLink() : toast('Solo practice — start a game to invite');
+  if(act === 'help')   return el('helpDlg').showModal();
+  if(act === 'rename'){ el('nameField').value = MY_NAME; el('nameDlg').showModal(); return; }
+  if(act === 'end'){    if(confirm('End the game and show final scores?')) endGame(); return; }
+  if(act === 'leave'){  location.hash = ''; location.reload(); }
+});
+
+el('nameSave').onclick = async ()=>{
+  MY_NAME = (el('nameField').value||'').trim().slice(0,14) || 'Player';
+  localStorage.setItem('ana_name', MY_NAME);
+  el('nameDlg').close();
+  await Store.mutate(st=>{ if(!st.players[PLAYER_ID]) return false; st.players[PLAYER_ID].name = MY_NAME; });
+  lastWordKey = ''; render();
+};
+
+el('claimInput').addEventListener('input', onClaimType);
+el('claimInput').addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); submitWord(); } });
+el('btnSubmit').onclick = submitWord;
+el('btnGiveUp').onclick = abandonClaim;
+
+el('penaltyWords').addEventListener('click', e=>{
+  const w = e.target.dataset && e.target.dataset.w; if(w) giveUpWord(w);
+});
+el('btnAgain').onclick = async ()=>{
+  el('overDlg').close();
+  await Store.mutate(st=>{
+    const names = {};
+    for(const pid in st.players) names[pid] = st.players[pid].name;
+    const fresh = freshState();
+    for(const pid of st.order){ fresh.players[pid] = { name:names[pid], words:[], joined:nowS() }; fresh.order.push(pid); }
+    Object.assign(st, fresh);
+  });
+  lastWordKey = ''; lastMidLen = 0; render();
+};
+
+/* keyboard: space flips, Enter calls a word (desktop niceties) */
+document.addEventListener('keydown', e=>{
+  if(el('game').classList.contains('hide') || Claim.open) return;
+  if(document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if(e.code === 'Space'){ e.preventDefault(); doFlip(); }
+  if(e.key === 'Enter'){ e.preventDefault(); doClaim(); }
+});
+
+/* boot: an invite link (#r=CODE) drops you straight into that table */
+(async function boot(){
+  el('nameInput').value = MY_NAME;
+  const m = /r=([A-Za-z]{4})/.exec(location.hash || '');
+  if(m){
+    const code = m[1].toUpperCase();
+    await loadDict();
+    Store.room = code; Store.online = true;
+    await Store.pull();
+    if(!Store.state){ toast('That game has expired'); location.hash=''; return; }
+    await Store.connect(code);
+    if(!MY_NAME){                                        // ask who you are before announcing you
+      el('nameField').value = '';
+      el('nameDlg').showModal();
+      el('nameSave').onclick = async ()=>{
+        MY_NAME = (el('nameField').value||'').trim().slice(0,14) || 'Player';
+        localStorage.setItem('ana_name', MY_NAME);
+        el('nameDlg').close();
+        await Store.mutate(joinState);
+        showGame(); render();
+      };
+      return;
+    }
+    await Store.mutate(joinState);
+    showGame(); render();
+  }else{
+    loadDict();                                          // warm the dictionary while they read the home screen
+  }
+})();
+</script>
+</body>
+</html>
