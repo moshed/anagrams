@@ -19,9 +19,16 @@ GitHub Pages from `main` root). Deploy = edit `index.html` + `git push`.
   generated with the PIL snippet in git history.
 
 ## The rules as implemented
-- **Bag** = the Bananagrams distribution, 144 tiles (`TILE_COUNTS`), shuffled
-  at game start. Anyone can hit **Flip** to turn one tile face-up into the
-  middle (500 ms global cooldown, blocked while a claim/penalty is live).
+- **Bag** = one of three tile sets (`TILE_SETS`), shuffled at game start and
+  recorded in `state.settings.bagMix`; picked on the home screen or in
+  ⋯ → Table settings (stored per browser in `ana_bag`, applied to the NEXT game):
+  - `scrabble` — 98 tiles, 43% vowels — **the default**
+  - `bananagrams` — the real 144-tile Bananagrams mix, 42% vowels
+  - `lean` — 87 tiles, 36% vowels — Scrabble's consonants with the vowels
+    thinned; the only mix that actually plays drier (the other two are
+    within a point of each other, which surprises people)
+  Anyone can hit **Flip** to turn one tile face-up into the middle (500 ms
+  global cooldown, blocked while a claim/penalty is live).
 - **Min word length 4** (`MIN_LEN`).
 - **Calling a word** (`I HAVE A WORD!`) takes an exclusive lock on the table:
   `state.claim = {pid, start, deadline}`. Everyone else's buttons go dead —
@@ -40,13 +47,16 @@ GitHub Pages from `main` root). Deploy = edit `index.html` + `git push`.
 - **Multiple legal steals?** `findMove()` picks the **longest source word**
   (the biggest steal).
 - **Penalty for a miss**: bad word, gave up, or clock expired → the caller must
-  give up one of *their* words and its letters go **back to the middle**
-  (`startPenalty` → `giveUpWord`). 20 s to choose or their shortest word is
-  auto-picked. Nothing to lose if they have no words yet.
+  give up one of *their* words and its letters are shuffled back **into the bag,
+  unflipped** (`returnToBag()`), never onto the table — otherwise the next player
+  just picks the same word straight back up. 20 s to choose or their shortest
+  word is auto-picked. Nothing to lose if they have no words yet.
 - **Flip approval** (⋯ → Flip settings, stored in `state.settings`): a flip can
   require a raw number of players or a percentage of them to ask
   (`flipThreshold()`); asks are `state.flipVotes`, shown on the Flip button and
   cleared whenever the table changes. Default is 1 = anyone flips instantly.
+  ⚠️ `settings` holds both `bagMix` and the flip rule — always MERGE when writing
+  it (`Object.assign`), never replace the object, or you wipe the other setting.
 - **Live source preview** (`previewMove()`): as you type, the claim box shows a
   glowing mini-tile per letter taken from the middle and an orange chip for the
   word you'd take, named with its owner. Makes "all of it or nothing" obvious.

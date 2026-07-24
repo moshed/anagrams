@@ -232,6 +232,10 @@
         <input id="joinCode" class="field" placeholder="CODE" maxlength="4" autocomplete="off" autocapitalize="characters" />
         <button id="btnJoin" class="btn">Join</button>
       </div>
+      <div class="row" style="margin-top:10px">
+        <span class="muted" style="font-size:13px;white-space:nowrap">Tile bag</span>
+        <select id="bagPick" class="field"></select>
+      </div>
     </div>
 
     <div id="resume" class="card hide">
@@ -309,7 +313,7 @@
     <li>Build it from middle letters, <b>or steal</b> a word already on the table: use <b>every</b> letter of it plus <b>at least one</b> from the middle. <b>No taking part of a word</b> — it's all of it or nothing.</li>
     <li>While you type, the box shows where each letter comes from: glowing tiles come off the middle, the orange chip is the word you'd take.</li>
     <li>A steal must <b>change the root</b>. Just adding S, ES, ED, ING, ER or EST doesn't count (CAT → CATS ✗, CARE → RACER ✓).</li>
-    <li><b>Miss and you pay:</b> if your word is bad or the clock runs out, you give up one of your own words — its letters go back to the middle.</li>
+    <li><b>Miss and you pay:</b> if your word is bad or the clock runs out, you give up one of your own words — its letters are shuffled back <b>into the bag</b>, unflipped, so nobody just grabs them straight back.</li>
     <li>You get <b>5 seconds</b> to start typing, and <b>+2 seconds</b> for every letter you type.</li>
     <li>Bag empties, game ends — <b>most tiles wins</b>.</li>
   </ul>
@@ -334,6 +338,9 @@
 </div></dialog>
 
 <dialog id="settingsDlg"><div class="dlg">
+  <h3>Table settings</h3>
+  <p>Tile bag — applies to the next game (including Play again).</p>
+  <select id="bagPick2" class="field" style="margin-bottom:16px"></select>
   <h3>Flipping a tile</h3>
   <p>How many players have to ask for a tile before it flips? Everyone sees the count on the Flip button.</p>
   <div class="row" style="margin-bottom:10px">
@@ -409,9 +416,24 @@ const PENALTY_MS   = 20000;  // time to pick the word you lose
 const FLIP_COOLDOWN= 500;
 const POLL_MS      = 1500;
 
-/* Bananagrams tile distribution — 144 tiles. */
-const TILE_COUNTS = {A:13,B:3,C:3,D:6,E:18,F:3,G:4,H:3,I:12,J:2,K:2,L:5,M:3,N:8,O:11,P:3,
-                     Q:2,R:9,S:6,T:9,U:6,V:3,W:3,X:2,Y:3,Z:2};
+/* Tile bags. Note the vowel share: Bananagrams and Scrabble are practically the
+   same (42% / 43%) — Scrabble is just a smaller bag, not a drier one. "Lean" is
+   the one that actually cuts vowels: Scrabble's consonants with the vowels
+   thinned to ~36%. */
+const TILE_SETS = {
+  scrabble:    { name:'Scrabble (98)',
+                 counts:{A:9,B:2,C:2,D:4,E:12,F:2,G:3,H:2,I:9,J:1,K:1,L:4,M:2,N:6,O:8,P:2,
+                         Q:1,R:6,S:4,T:6,U:4,V:2,W:2,X:1,Y:2,Z:1} },
+  bananagrams: { name:'Bananagrams (144)',
+                 counts:{A:13,B:3,C:3,D:6,E:18,F:3,G:4,H:3,I:12,J:2,K:2,L:5,M:3,N:8,O:11,P:3,
+                         Q:2,R:9,S:6,T:9,U:6,V:3,W:3,X:2,Y:3,Z:2} },
+  lean:        { name:'Lean — fewer vowels (87)',
+                 counts:{A:7,B:2,C:2,D:4,E:9,F:2,G:3,H:2,I:6,J:1,K:1,L:4,M:2,N:6,O:6,P:2,
+                         Q:1,R:6,S:4,T:6,U:3,V:2,W:2,X:1,Y:2,Z:1} }
+};
+const DEFAULT_BAG = 'scrabble';
+function bagKey(k){ return TILE_SETS[k] ? k : DEFAULT_BAG; }
+function myBagChoice(){ return bagKey(localStorage.getItem('ana_bag') || DEFAULT_BAG); }
 
 /* ---------- tiny helpers ---------- */
 const $  = s => document.querySelector(s);
@@ -515,15 +537,24 @@ function sameRoot(a, b){
 /* ============================================================
    Game state (the jsonb blob) + rules
    ============================================================ */
-function shuffledBag(){
-  const bag = [];
-  for(const L in TILE_COUNTS) for(let i=0;i<TILE_COUNTS[L];i++) bag.push(L);
+function shuffledBag(mix){
+  const counts = TILE_SETS[bagKey(mix)].counts, bag = [];
+  for(const L in counts) for(let i=0;i<counts[L];i++) bag.push(L);
   for(let i=bag.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [bag[i],bag[j]] = [bag[j],bag[i]]; }
   return bag;
 }
-function freshState(){
-  return { v:1, started:true, ended:false, bag:shuffledBag(), mid:[],
-           players:{}, order:[], claim:null, penalty:null, lastFlip:0, log:[], seq:0 };
+function freshState(mix){
+  mix = bagKey(mix);
+  return { v:1, started:true, ended:false, bag:shuffledBag(mix), mid:[],
+           players:{}, order:[], claim:null, penalty:null, lastFlip:0, log:[], seq:0,
+           settings:{ bagMix:mix } };
+}
+/* A forfeited word goes back UNFLIPPED — shuffled into the bag, not dumped on
+   the table for the next player to pick straight back up. */
+function returnToBag(st, word){
+  for(const L of word.split('')){
+    st.bag.splice(Math.floor(Math.random() * (st.bag.length + 1)), 0, L);
+  }
 }
 function addLog(st, entry){
   st.seq = (st.seq||0) + 1;
@@ -877,7 +908,7 @@ async function giveUpWord(word){
     const i = p.words.findIndex(x => x.w === word);
     if(i < 0) return false;
     const [lost] = p.words.splice(i,1);
-    for(const L of lost.w.split('')) st.mid.push(L);    // letters go back to the middle
+    returnToBag(st, lost.w);                            // unflipped, back in the bag
     st.penalty = null;
     st.flipVotes = [];
     addLog(st, { type:'lost', pid:PLAYER_ID, name:p.name, word:lost.w });
@@ -915,7 +946,7 @@ async function refereeTimers(){
         let i = 0;
         p.words.forEach((x,k)=>{ if(x.w.length < p.words[i].w.length) i = k; });
         const [lost] = p.words.splice(i,1);
-        for(const L of lost.w.split('')) s.mid.push(L);
+        returnToBag(s, lost.w);
         addLog(s, { type:'lost', pid:s.penalty.pid, name:p.name, word:lost.w });
       }
       s.penalty = null;
@@ -1016,7 +1047,7 @@ function render(){
   const dlg = el('penaltyDlg');
   if(pen && pen.pid === PLAYER_ID && myPlayer(st) && myPlayer(st).words.length){
     if(!dlg.open){
-      el('penaltyWhy').textContent = (pen.why ? pen.why + '. ' : '') + 'Pick a word to give up — its letters go back to the middle.';
+      el('penaltyWhy').textContent = (pen.why ? pen.why + '. ' : '') + 'Pick a word to give up — its letters are shuffled back into the bag.';
       el('penaltyWords').innerHTML = myPlayer(st).words.map(w=> '<button data-w="' + w.w + '">' + w.w + '</button>').join('');
       dlg.showModal();
     }
@@ -1037,7 +1068,7 @@ function feedLine(l, st){
     case 'steal': return '<b>' + esc(l.name) + '</b> stole ' + esc(l.src) + ' → <span class="w">' + l.word + '</span>' +
                          (l.fromName ? ' from <b>' + esc(l.fromName) + '</b>' : '');
     case 'miss':  return '<b>' + esc(l.name) + '</b> missed' + (l.why ? ' — ' + esc(l.why) : '');
-    case 'lost':  return '<b>' + esc(l.name) + '</b> gave up ' + esc(l.word);
+    case 'lost':  return '<b>' + esc(l.name) + '</b> gave up ' + esc(l.word) + ' — back in the bag';
     case 'join':  return '<b>' + esc(l.name) + '</b> joined';
     case 'claim': return '<b>' + esc(l.name) + '</b> called a word…';
     case 'end':   return 'Game over';
@@ -1171,7 +1202,7 @@ async function createGame(){
   MY_NAME = (el('nameInput').value || '').trim().slice(0,14) || 'Player';
   localStorage.setItem('ana_name', MY_NAME);
   await loadDict();
-  const st = freshState();
+  const st = freshState(myBagChoice());
   joinState(st);
   for(let i=0;i<4;i++){                                  // retry on a code collision
     const code = roomCode();
@@ -1222,6 +1253,8 @@ async function copyLink(){
 
 /* ---- flip-approval settings ---- */
 function openSettings(){
+  fillBagPickers();
+  el('bagPick2').value = (Store.state && Store.state.settings && Store.state.settings.bagMix) || myBagChoice();
   const r = flipRule(Store.state);
   el('flipMode').value = r.mode;
   el('flipValue').value = r.value;
@@ -1245,13 +1278,27 @@ el('inviteCopy').onclick = ()=>{                       // inside the tap — thi
   el('inviteCopy').textContent = 'Copied ✓';
   toast('Invite link copied');
 };
+function fillBagPickers(){
+  const opts = Object.keys(TILE_SETS).map(k=>{
+    const c = TILE_SETS[k].counts, tot = Object.values(c).reduce((a,b)=>a+b,0);
+    const vow = ['A','E','I','O','U'].reduce((a,L)=>a+c[L],0);
+    return '<option value="' + k + '">' + TILE_SETS[k].name + ' · ' + Math.round(100*vow/tot) + '% vowels</option>';
+  }).join('');
+  el('bagPick').innerHTML = opts;  el('bagPick').value = myBagChoice();
+  el('bagPick2').innerHTML = opts; el('bagPick2').value = myBagChoice();
+}
+el('bagPick').addEventListener('change', ()=>{ localStorage.setItem('ana_bag', bagKey(el('bagPick').value)); fillBagPickers(); });
+el('bagPick2').addEventListener('change', ()=>{ localStorage.setItem('ana_bag', bagKey(el('bagPick2').value)); fillBagPickers(); });
 el('flipMode').addEventListener('change', syncFlipPreview);
 el('flipValue').addEventListener('input', syncFlipPreview);
 el('flipSave').onclick = async ()=>{
   const mode = el('flipMode').value === 'pct' ? 'pct' : 'raw';
   const value = Math.max(1, Math.min(Number(el('flipValue').value) || 1, mode === 'pct' ? 100 : 20));
   el('settingsDlg').close();
-  await Store.mutate(st=>{ st.settings = { flipMode:mode, flipValue:value }; st.flipVotes = []; });
+  await Store.mutate(st=>{                       // merge — don't clobber bagMix
+    st.settings = Object.assign({}, st.settings, { flipMode:mode, flipValue:value });
+    st.flipVotes = [];
+  });
   toast(mode === 'pct' ? 'Flip needs ' + value + '% of players' : 'Flip needs ' + value + ' player' + (value===1?'':'s'));
   render();
 };
@@ -1282,7 +1329,7 @@ el('btnSolo').onclick = async ()=>{
   MY_NAME = (el('nameInput').value || '').trim().slice(0,14) || 'You';
   localStorage.setItem('ana_name', MY_NAME);
   await loadDict();
-  const st = freshState(); joinState(st);
+  const st = freshState(myBagChoice()); joinState(st);
   Store.local(st); showGame(); render();
 };
 
@@ -1324,7 +1371,8 @@ el('btnAgain').onclick = async ()=>{
   await Store.mutate(st=>{
     const names = {};
     for(const pid in st.players) names[pid] = st.players[pid].name;
-    const fresh = freshState();
+    const fresh = freshState((st.settings && st.settings.bagMix) || myBagChoice());
+    fresh.settings = Object.assign({}, st.settings, fresh.settings);   // keep the flip rule
     for(const pid of st.order){ fresh.players[pid] = { name:names[pid], words:[], joined:nowS() }; fresh.order.push(pid); }
     Object.assign(st, fresh);
   });
@@ -1342,6 +1390,7 @@ document.addEventListener('keydown', e=>{
 /* boot: an invite link (#r=CODE) drops you straight into that table */
 (async function boot(){
   el('nameInput').value = MY_NAME;
+  fillBagPickers();
   const m = /r=([A-Za-z]{4})/.exec(location.hash || '');
   if(m){
     const code = m[1].toUpperCase();
