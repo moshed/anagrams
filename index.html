@@ -865,7 +865,11 @@ async function submitWord(){
     return;
   }
   closeClaim();
+  // what actually committed, captured from INSIDE the mutation (the outer
+  // `move` is only the optimistic pre-check, and mutate may retry)
+  let stole = null;
   const ok = await Store.mutate(st=>{
+    stole = null;
     if(!st.claim || st.claim.pid !== PLAYER_ID) return false;      // clock ran out / stolen
     const m = findMove(w, st);                                     // re-check on the FRESH table
     if(m.bad){ st.claim = null; startPenalty(st, PLAYER_ID, m.bad); return; }
@@ -878,6 +882,7 @@ async function submitWord(){
       const i = owner.words.findIndex(x => x.w === m.src);
       if(i < 0) return false;
       owner.words.splice(i,1);
+      stole = { from:m.from, src:m.src };                          // notify the victim after commit
     }
     for(const L of used){                                          // take the tiles off the table
       const i = st.mid.indexOf(L);
@@ -892,6 +897,33 @@ async function submitWord(){
           from:m.from, fromName:(st.players[m.from]||{}).name, src:m.src });
   });
   if(ok && Store.state.penalty && Store.state.penalty.pid === PLAYER_ID) toast('Too slow — the table changed!');
+  if(ok && stole) enqueueSteal(stole.from, stole.src, w);
+}
+
+/* Tell the victim their word was taken — reaches their phone even with the app
+   closed. The thief is the authority on the event, so THIS browser enqueues it
+   (wow_push_queue → wow-push → APNs), matching the iOS app's contract; without
+   it, being robbed by a browser player notified nobody. Fire-and-forget. */
+async function enqueueSteal(victim, src, into){
+  if(!victim || victim === PLAYER_ID || !SUPABASE_URL) return;
+  const myName = (Store.state.players[PLAYER_ID] || {}).name || 'Someone';
+  try{
+    await fetch(SUPABASE_URL + '/rest/v1/wow_push_queue', {
+      method:'POST',
+      headers:{ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY,
+                'Content-Type':'application/json', Prefer:'return=minimal' },
+      body: JSON.stringify({
+        to_player: victim, game:'ana', kind:'steal',
+        title: `${myName} stole ${src.toUpperCase()}`,
+        body: `It just became ${into.toUpperCase()}. Steal it back?`,
+        dedup: `steal-${src}-${into}`
+      })
+    });
+    fetch(SUPABASE_URL + '/functions/v1/wow-push', {
+      method:'POST', headers:{ Authorization:'Bearer '+SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
+      body:'{}'
+    }).catch(()=>{});
+  }catch(e){ /* never let a notification break play */ }
 }
 
 function startPenalty(st, pid, why){
