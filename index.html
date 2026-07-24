@@ -82,8 +82,8 @@
   /* ---------- table ---------- */
   #game{flex:1;display:flex;flex-direction:column;min-height:0}
   #midWrap{
-    flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
-    padding:6px 10px;position:relative;
+    flex:1;min-height:84px;display:flex;align-items:center;justify-content:center;
+    padding:4px 10px;position:relative;
   }
   #mid{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-content:center;overflow-y:auto;max-height:100%;padding:4px}
   .tile{
@@ -111,18 +111,20 @@
   #feed .w{color:var(--gold);font-weight:700;letter-spacing:.5px}
 
   /* ---------- players ---------- */
-  #players{display:flex;gap:8px;overflow-x:auto;padding:6px 10px 8px;scrollbar-width:none}
-  #players::-webkit-scrollbar{display:none}
+  .prow{display:flex;flex-wrap:wrap;gap:6px;padding:4px 8px;align-items:flex-start}
+  .prow:empty{display:none}
   .pcard{
-    flex:0 0 auto;min-width:130px;max-width:210px;background:rgba(0,0,0,.24);
-    border:1px solid var(--line);border-radius:14px;padding:8px 10px;
+    flex:1 1 calc(33.333% - 4px);min-width:0;max-width:none;background:rgba(0,0,0,.24);
+    border:1px solid var(--line);border-radius:14px;padding:7px 9px;
   }
   .pcard.me{border-color:var(--gold);background:rgba(240,195,74,.09)}
   .pcard.claiming{border-color:var(--good);box-shadow:0 0 0 2px rgba(74,222,128,.25)}
   .phead{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:13px}
   .pname{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ptiles{color:var(--gold);font-weight:700;font-size:12px;white-space:nowrap}
-  .pwords{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:88px;overflow-y:auto}
+  /* every word stays on screen — the cards grow and the middle gives up room */
+  .pwords{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px}
+  .pwords.dense .chip{font-size:10px;padding:1px 4px;letter-spacing:.3px}
   .chip{
     background:var(--tile);color:var(--tile-ink);border-radius:5px;padding:2px 6px;
     font:700 11px/1.35 Georgia,serif;letter-spacing:.6px;
@@ -142,8 +144,13 @@
   /* ---------- claim overlay ---------- */
   .sheet{
     position:fixed;inset:0;background:rgba(3,14,10,.78);backdrop-filter:blur(3px);
-    display:flex;align-items:flex-start;justify-content:center;padding:14vh 16px 16px;z-index:40;
+    display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;z-index:40;
+    transition:opacity .1s;
   }
+  /* NOT display:none — iOS refuses to focus an input that wasn't rendered when
+     the tap happened, and that's the difference between the keyboard popping
+     up instantly and not at all. Keep it laid out, just invisible. */
+  #claimSheet.hide{display:flex !important;opacity:0 !important;visibility:hidden !important;pointer-events:none !important}
   .sheetbox{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px}
   .sheetbox h3{margin:0 0 10px;font-size:17px}
   #claimInput{
@@ -156,6 +163,20 @@
   .timerbar.low i{background:var(--bad)}
   .clockrow{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
   #claimErr{min-height:18px;color:var(--bad);font-size:13px;text-align:center;margin-top:8px;font-weight:600}
+  /* live "where do these letters come from" preview under the input */
+  #claimHint{min-height:34px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center;
+             margin-top:10px;font-size:12px;text-align:center}
+  .minitile{background:var(--tile);color:var(--tile-ink);border:1px solid var(--tile-edge);border-radius:4px;
+            padding:2px 5px;font:700 12px/1.3 Georgia,serif}
+  .minitile.mid{box-shadow:0 0 0 2px rgba(240,195,74,.55)}      /* comes off the table */
+  .srcword{background:var(--steal);color:#2a1500;border-radius:5px;padding:2px 6px;font:700 12px/1.3 Georgia,serif;letter-spacing:.6px}
+  .hintbad{color:var(--muted)}
+  .code{font:800 20px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:4px;color:var(--gold)}
+  .rgame{display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin-bottom:6px;
+         background:rgba(0,0,0,.18);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer}
+  .rgame:last-child{margin-bottom:0}
+  .rgame b{font:800 15px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:3px;color:var(--gold)}
+  .rgame span{font-size:12px;color:var(--muted)}
 
   /* ---------- dialogs ---------- */
   dialog{
@@ -189,7 +210,7 @@
   .rank{width:26px;text-align:center;font-weight:800;color:var(--gold)}
   .stiles{margin-left:auto;font-weight:800}
 
-  @media (max-height:680px){ .pwords{max-height:60px} .hero h1{font-size:32px} }
+  @media (max-height:680px){ .hero h1{font-size:32px} }
 </style>
 </head>
 <body>
@@ -213,6 +234,11 @@
       </div>
     </div>
 
+    <div id="resume" class="card hide">
+      <div class="muted" style="font-size:13px;margin-bottom:8px">Your games — pick any one back up</div>
+      <div id="resumeList"></div>
+    </div>
+
     <div class="row" style="justify-content:center">
       <button id="btnHelpHome" class="btn ghost">How to play</button>
       <button id="btnSolo" class="btn ghost">Practice solo</button>
@@ -229,13 +255,15 @@
       <button id="btnMenu" class="iconbtn">⋯</button>
     </header>
 
+    <div id="playersTop" class="prow"></div>
+
     <div id="midWrap">
       <div id="mid"></div>
       <div id="banner" class="banner hide"></div>
     </div>
 
     <div id="feed"></div>
-    <div id="players"></div>
+    <div id="playersBottom" class="prow"></div>
 
     <div id="controls">
       <button id="btnFlip" class="btn">Flip<small id="bagLeft">144 left</small></button>
@@ -249,6 +277,7 @@
   <div class="sheetbox">
     <h3>Type it — fast!</h3>
     <input id="claimInput" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
+    <div id="claimHint"></div>
     <div class="timerbar"><i id="timerFill" style="width:100%"></i></div>
     <div class="clockrow"><span id="clockTxt">5.0s</span><span class="muted">+2s per letter</span></div>
     <div id="claimErr"></div>
@@ -263,6 +292,8 @@
 <dialog id="menuDlg"><div class="menu">
   <button data-act="share">Invite players (copy link)</button>
   <button data-act="rename">Change my name</button>
+  <button data-act="settings">Flip settings</button>
+  <button data-act="id">My player ID (play on another device)</button>
   <button data-act="help">How to play</button>
   <button data-act="end">End game &amp; show scores</button>
   <button data-act="leave">Leave game</button>
@@ -272,10 +303,11 @@
 <dialog id="helpDlg"><div class="dlg">
   <h3>How to play</h3>
   <ul>
-    <li><b>Flip</b> a tile to add a letter to the middle.</li>
+    <li><b>Flip</b> a tile to add a letter to the middle. By default anyone can flip; in <b>⋯ → Flip settings</b> you can make it need a number of players (say 2) or a share of them (say 50%) — the button then shows "1/2 asked".</li>
     <li>See a word? Hit <b>I HAVE A WORD!</b> first — it locks everyone else out while you type it.</li>
     <li>Words must be <b>4+ letters</b>.</li>
-    <li>Build it from middle letters, <b>or steal</b> a word already on the table: use <b>all</b> its letters plus <b>at least one</b> from the middle.</li>
+    <li>Build it from middle letters, <b>or steal</b> a word already on the table: use <b>every</b> letter of it plus <b>at least one</b> from the middle. <b>No taking part of a word</b> — it's all of it or nothing.</li>
+    <li>While you type, the box shows where each letter comes from: glowing tiles come off the middle, the orange chip is the word you'd take.</li>
     <li>A steal must <b>change the root</b>. Just adding S, ES, ED, ING, ER or EST doesn't count (CAT → CATS ✗, CARE → RACER ✓).</li>
     <li><b>Miss and you pay:</b> if your word is bad or the clock runs out, you give up one of your own words — its letters go back to the middle.</li>
     <li>You get <b>5 seconds</b> to start typing, and <b>+2 seconds</b> for every letter you type.</li>
@@ -289,6 +321,50 @@
   <input id="nameField" class="field big" maxlength="14" placeholder="Name" autocomplete="off" />
   <div style="height:10px"></div>
   <button id="nameSave" class="btn primary big">Save</button>
+</div></dialog>
+
+<dialog id="inviteDlg"><div class="dlg">
+  <h3>Game <span id="inviteCode" class="code"></span></h3>
+  <p>Send this link. They open it on their own phone and join this table.</p>
+  <input id="inviteLink" class="field" readonly onclick="this.select()" />
+  <div class="row" style="margin-top:10px">
+    <button id="inviteCopy" class="btn primary grow">Copy link</button>
+    <button class="btn ghost grow" onclick="inviteDlg.close()">Start playing</button>
+  </div>
+</div></dialog>
+
+<dialog id="settingsDlg"><div class="dlg">
+  <h3>Flipping a tile</h3>
+  <p>How many players have to ask for a tile before it flips? Everyone sees the count on the Flip button.</p>
+  <div class="row" style="margin-bottom:10px">
+    <select id="flipMode" class="field">
+      <option value="raw">a set number of players</option>
+      <option value="pct">a percentage of players</option>
+    </select>
+    <input id="flipValue" class="field" type="number" min="1" max="100" style="max-width:110px" />
+    <span id="flipUnit" class="muted"></span>
+  </div>
+  <p class="muted" id="flipPreview" style="font-size:13px"></p>
+  <div class="row">
+    <button class="btn ghost grow" onclick="settingsDlg.close()">Cancel</button>
+    <button id="flipSave" class="btn primary grow">Save</button>
+  </div>
+</div></dialog>
+
+<dialog id="idDlg"><div class="dlg">
+  <h3>Your player ID</h3>
+  <p>This browser is who you are — your games and words follow it. Paste this ID into another browser to become the same player there.</p>
+  <input id="idField" class="field" readonly onclick="this.select()" />
+  <div class="row" style="margin:10px 0">
+    <button id="idCopy" class="btn primary grow">Copy my ID</button>
+  </div>
+  <p>Or take over an ID from another device:</p>
+  <input id="idPaste" class="field" placeholder="paste an ID here" autocomplete="off" />
+  <div style="height:10px"></div>
+  <div class="row">
+    <button class="btn ghost grow" onclick="idDlg.close()">Cancel</button>
+    <button id="idUse" class="btn grow">Use that ID</button>
+  </div>
 </div></dialog>
 
 <dialog id="penaltyDlg"><div class="dlg">
@@ -499,9 +575,16 @@ const Store = {
     return Object.assign({ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY,
                            'Content-Type':'application/json' }, extra||{});
   },
+  /* Sync to server time — but the Date header has only 1-second resolution, so a
+     healthy device would pick up ~1s of phantom skew and referee the countdown
+     a second early or late. Only correct clocks that are genuinely wrong. */
   noteTime(res){
     const d = res.headers.get('date');
-    if(d){ const t = Date.parse(d); if(t) SKEW = t - Date.now(); }
+    if(!d) return;
+    const t = Date.parse(d);
+    if(!t) return;
+    const off = t - Date.now();
+    SKEW = Math.abs(off) > 3000 ? off : 0;
   },
 
   async create(room, st){
@@ -521,9 +604,23 @@ const Store = {
     if(!res.ok) return this.state;
     this.noteTime(res);
     const [row] = await res.json();
-    if(!row) return this.state;
+    if(!row){ this.missing = true; return this.state; }   // room row is gone (expired/cleaned)
+    this.missing = false;
     if(row.version >= this.version){ this.state = row.state; this.version = row.version; }
     return this.state;
+  },
+
+  /* The room row vanished under us (housekeeping, a bad delete, whatever) —
+     put our copy of the table back rather than bricking the game. */
+  async reseat(st){
+    try{
+      const res = await fetch(REST, { method:'POST', headers:this.headers({Prefer:'return=representation'}),
+                                      body:JSON.stringify({ room:this.room, state:st, version:1 }) });
+      if(!res.ok) return false;
+      const [row] = await res.json();
+      this.state = row.state; this.version = row.version; this.missing = false;
+      return true;
+    }catch(e){ return false; }
   },
 
   /* Apply `fn(state)` and push it. fn returns false to abort.
@@ -537,6 +634,10 @@ const Store = {
       if(out === false){ render(); return false; }
 
       if(!this.online){ this.state = next; this.version++; render(); return true; }
+
+      if(this.missing){                              // row disappeared — recreate it, then carry on
+        if(await this.reseat(next)){ render(); return true; }
+      }
 
       const res = await fetch(REST + '?room=eq.' + encodeURIComponent(this.room) + '&version=eq.' + this.version,
         { method:'PATCH', headers:this.headers({Prefer:'return=representation'}),
@@ -584,15 +685,43 @@ function joinState(st){
   }
 }
 
+/* How many players have to ask before a tile actually flips.
+   'raw' = a plain head count, 'pct' = a share of the players at the table.
+   Default is 1 — i.e. anyone flips instantly, the classic table rule. */
+function flipRule(st){
+  const s = (st && st.settings) || {};
+  return { mode: s.flipMode === 'pct' ? 'pct' : 'raw', value: Number(s.flipValue) || 1 };
+}
+function flipThreshold(st){
+  const n = (st.order || []).length || 1;
+  const r = flipRule(st);
+  const need = r.mode === 'pct' ? Math.ceil(n * r.value / 100) : r.value;
+  return Math.max(1, Math.min(need, n));
+}
+function turnTile(st){
+  const L = st.bag.pop();
+  st.mid.push(L);
+  st.lastFlip = nowS();
+  st.flipVotes = [];
+  addLog(st, { type:'flip', letter:L });
+}
 async function doFlip(){
   await Store.mutate(st=>{
     if(st.ended || st.claim || st.penalty) return false;
     if(!st.bag.length) return false;
-    if(nowS() - (st.lastFlip||0) < FLIP_COOLDOWN) return false;
-    const L = st.bag.pop();
-    st.mid.push(L);
-    st.lastFlip = nowS();
-    addLog(st, { type:'flip', letter:L });
+    if(!st.players[PLAYER_ID]) joinState(st);
+    st.flipVotes = st.flipVotes || [];
+    const need = flipThreshold(st);
+    if(need <= 1){
+      if(nowS() - (st.lastFlip||0) < FLIP_COOLDOWN) return false;
+      return turnTile(st);
+    }
+    if(st.flipVotes.includes(PLAYER_ID)){                       // tap again = take your ask back
+      st.flipVotes = st.flipVotes.filter(p => p !== PLAYER_ID);
+      return;
+    }
+    st.flipVotes.push(PLAYER_ID);
+    if(st.flipVotes.length >= need) turnTile(st);
   }, { once:true });
 }
 
@@ -633,6 +762,7 @@ function openClaim(){
   Claim.maxLen = 0;
   Claim.start = nowS();
   el('claimErr').textContent = '';
+  el('claimHint').innerHTML = '';
   const inp = el('claimInput');
   inp.value = '';
   el('claimSheet').classList.remove('hide');
@@ -655,6 +785,29 @@ function onClaimType(){
     Claim.deadline = Math.min(Claim.deadline + added*CLAIM_PER, start + CLAIM_CAP);
     pushDeadline();
   }
+  previewMove(v);
+}
+
+/* Show, while you type, exactly which tiles this word takes and from where:
+   glowing tiles come off the middle, the orange chip is the word you'd steal. */
+function previewMove(w){
+  const hint = el('claimHint');
+  const tile = (L, fromMid) => '<span class="minitile' + (fromMid ? ' mid' : '') + '">' + L + '</span>';
+  if(!w){ hint.innerHTML = ''; return; }
+  if(w.length < MIN_LEN){ hint.innerHTML = '<span class="hintbad">' + MIN_LEN + ' letters minimum</span>'; return; }
+  const m = findMove(w, Store.state);
+  if(m.bad){ hint.innerHTML = '<span class="hintbad">' + esc(m.bad) + '</span>'; return; }
+  if(m.type === 'new'){
+    hint.innerHTML = w.split('').map(L => tile(L, true)).join('') +
+                     '<span class="hintbad">&nbsp;all from the middle</span>';
+    return;
+  }
+  const owner = Store.state.players[m.from] || {};
+  hint.innerHTML = '<span class="srcword">' + m.src + '</span>' +
+    '<span class="hintbad">&nbsp;all of ' + esc(owner.name || 'their word') +
+    (m.from === PLAYER_ID ? "'s (yours)" : "'s") + '&nbsp;+&nbsp;</span>' +
+    m.uses.map(L => tile(L, true)).join('') +
+    '<span class="hintbad">&nbsp;from the middle</span>';
 }
 /* let the other devices see the extended clock, but don't spam the DB */
 function pushDeadline(){
@@ -701,6 +854,7 @@ async function submitWord(){
     }
     st.players[PLAYER_ID].words.push({ w, at:nowS() });
     st.claim = null;
+    st.flipVotes = [];                                             // table changed — re-ask to flip
     addLog(st, m.type === 'new'
       ? { type:'word', pid:PLAYER_ID, name:st.players[PLAYER_ID].name, word:w }
       : { type:'steal', pid:PLAYER_ID, name:st.players[PLAYER_ID].name, word:w,
@@ -725,6 +879,7 @@ async function giveUpWord(word){
     const [lost] = p.words.splice(i,1);
     for(const L of lost.w.split('')) st.mid.push(L);    // letters go back to the middle
     st.penalty = null;
+    st.flipVotes = [];
     addLog(st, { type:'lost', pid:PLAYER_ID, name:p.name, word:lost.w });
   });
 }
@@ -742,7 +897,7 @@ async function abandonClaim(){
    sure exactly one of them lands it. */
 async function refereeTimers(){
   const st = Store.state; if(!st) return;
-  if(st.claim && nowS() > st.claim.deadline + 250){
+  if(st.claim && nowS() > st.claim.deadline + 600){
     if(st.claim.pid === PLAYER_ID) closeClaim();
     await Store.mutate(s=>{
       if(!s.claim || s.claim.start !== st.claim.start) return false;
@@ -820,8 +975,13 @@ function render(){
                   + '|' + (st.claim ? st.claim.pid : '');
   if(wordKey !== lastWordKey){
     lastWordKey = wordKey;
-    const ids = st.order.slice().sort((a,b)=> (a===PLAYER_ID?-1:b===PLAYER_ID?1:0));
-    el('players').innerHTML = ids.map(pid=>{
+    /* Opponents sit above the table (3 across, wrapping to another row past
+       three), you sit below it next to the buttons. Nothing scrolls sideways —
+       every player's words stay on screen. */
+    const others = st.order.filter(p => p !== PLAYER_ID);
+    const top = others.slice(0,3);
+    const bottom = (st.players[PLAYER_ID] ? [PLAYER_ID] : []).concat(others.slice(3));
+    const card = pid=>{
       const p = st.players[pid]; if(!p) return '';
       const cls = 'pcard' + (pid===PLAYER_ID?' me':'') + (st.claim && st.claim.pid===pid?' claiming':'');
       const words = p.words.slice().sort((a,b)=> b.at - a.at)
@@ -829,15 +989,20 @@ function render(){
       return '<div class="' + cls + '">' +
                '<div class="phead"><span class="pname">' + esc(p.name||'Player') + (pid===PLAYER_ID?' (you)':'') + '</span>' +
                '<span class="ptiles">' + tilesOf(p) + '</span></div>' +
-               '<div class="pwords">' + (words || '<span class="muted" style="font-size:11px">no words yet</span>') + '</div>' +
+               '<div class="pwords' + (p.words.length > 8 ? ' dense' : '') + '">' +
+                 (words || '<span class="muted" style="font-size:11px">no words yet</span>') + '</div>' +
              '</div>';
-    }).join('');
+    };
+    el('playersTop').innerHTML    = top.map(card).join('');
+    el('playersBottom').innerHTML = bottom.map(card).join('');
   }
 
   /* controls */
   const busy = !!(st.claim || st.penalty) || st.ended;
   el('btnFlip').disabled = busy || !st.bag.length;
-  el('bagLeft').textContent = st.bag.length ? st.bag.length + ' left' : 'bag empty';
+  const need = flipThreshold(st), votes = (st.flipVotes || []).length;
+  el('bagLeft').textContent = (need > 1 ? votes + '/' + need + ' asked · ' : '') +
+                              (st.bag.length ? st.bag.length + ' left' : 'bag empty');
   const wb = el('btnWord');
   wb.disabled = busy;
   wb.textContent = st.ended ? 'GAME OVER'
@@ -948,6 +1113,58 @@ function roomCode(){
 }
 function shareLink(){ return location.origin + location.pathname + '#r=' + Store.room; }
 
+/* ---------- resume: this browser IS your account ----------
+   Rooms are remembered locally, and we also ask the server for any room whose
+   state still lists our player id — so a game started on the phone shows up on
+   the laptop once you carry the ID across (⋯ → My player ID). */
+function rememberRoom(code){
+  if(!code) return;
+  try{
+    const list = JSON.parse(localStorage.getItem('ana_rooms') || '[]').filter(r => r.room !== code);
+    list.unshift({ room:code, at:Date.now() });
+    localStorage.setItem('ana_rooms', JSON.stringify(list.slice(0,12)));
+  }catch(e){}
+}
+function localRooms(){
+  try{ return JSON.parse(localStorage.getItem('ana_rooms') || '[]'); }catch(e){ return []; }
+}
+function ago(ms){
+  const m = Math.round((Date.now()-ms)/60000);
+  if(m < 1) return 'just now';
+  if(m < 60) return m + 'm ago';
+  const h = Math.round(m/60);
+  return h < 24 ? h + 'h ago' : Math.round(h/24) + 'd ago';
+}
+async function myGames(){
+  const seen = {};
+  localRooms().forEach(r => { seen[r.room] = { room:r.room, at:r.at }; });
+  try{
+    const since = new Date(Date.now() - 7*864e5).toISOString();
+    const res = await fetch(REST + '?select=room,state,updated_at&updated_at=gte.' + since +
+                            '&order=updated_at.desc&limit=200',
+                            { headers:{ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY } });
+    if(res.ok){
+      for(const row of await res.json()){
+        const st = row.state || {};
+        if(!st.players || !st.players[PLAYER_ID]) continue;      // not my game
+        seen[row.room] = { room:row.room, at:Date.parse(row.updated_at),
+                           players:Object.keys(st.players).length, ended:!!st.ended,
+                           tiles:(st.players[PLAYER_ID].words||[]).reduce((n,w)=>n+w.w.length,0) };
+      }
+    }
+  }catch(e){ /* offline — the local list still works */ }
+  return Object.values(seen).sort((a,b)=> b.at - a.at).slice(0,6);
+}
+async function renderResume(){
+  const games = await myGames();
+  if(!games.length) return;
+  el('resumeList').innerHTML = games.map(g=>
+    '<button class="rgame" data-room="' + g.room + '"><b>' + g.room + '</b>' +
+    '<span>' + (g.ended ? 'finished' : (g.players ? g.players + ' players' : 'saved')) +
+    (g.tiles ? ' · ' + g.tiles + ' tiles' : '') + ' · ' + ago(g.at) + '</span></button>').join('');
+  el('resume').classList.remove('hide');
+}
+
 function showGame(){ el('home').classList.add('hide'); el('game').classList.remove('hide'); setTimeout(sizeTiles, 50); }
 
 async function createGame(){
@@ -961,9 +1178,24 @@ async function createGame(){
     try{ await Store.create(code, st); break; }
     catch(e){ if(i===3){ toast('Could not reach the table — playing solo'); Store.local(st); } }
   }
-  if(Store.online){ location.hash = 'r=' + Store.room; await Store.connect(Store.room); }
+  if(Store.online){ location.hash = 'r=' + Store.room; rememberRoom(Store.room); await Store.connect(Store.room); }
   showGame(); render();
-  if(Store.online) copyLink(true);
+  if(Store.online) openInvite();
+}
+
+/* Auto-copy on create, and ALWAYS show the link too: Safari refuses a
+   clipboard write once the tap gesture is gone (we had to await the server
+   first), so the dialog's Copy button is the guaranteed path. */
+async function openInvite(){
+  if(!Store.online) return toast('Solo practice — start a game to invite');
+  el('inviteCode').textContent = Store.room;
+  el('inviteLink').value = shareLink();
+  el('inviteDlg').showModal();
+  try{
+    await navigator.clipboard.writeText(shareLink());
+    el('inviteCopy').textContent = 'Copied ✓';
+    toast('Invite link copied');
+  }catch(e){ el('inviteCopy').textContent = 'Copy link'; }
 }
 
 async function joinGame(code){
@@ -974,18 +1206,73 @@ async function joinGame(code){
   await loadDict();
   Store.room = code; Store.online = true;
   await Store.pull();
-  if(!Store.state) return toast('No game with code ' + code);
+  if(!Store.state){ Store.online = false; Store.room = null; return toast('No game with code ' + code + ' — check the code, or ask for the link'); }
   location.hash = 'r=' + code;
+  rememberRoom(code);
   await Store.connect(code);
   await Store.mutate(joinState);
   showGame(); render();
 }
 
-async function copyLink(quiet){
+async function copyLink(){
   const link = shareLink();
-  try{ await navigator.clipboard.writeText(link); toast(quiet ? 'Game ' + Store.room + ' — invite link copied' : 'Invite link copied'); }
-  catch(e){ prompt('Share this link:', link); }
+  try{ await navigator.clipboard.writeText(link); toast('Invite link copied'); }
+  catch(e){ openInvite(); }
 }
+
+/* ---- flip-approval settings ---- */
+function openSettings(){
+  const r = flipRule(Store.state);
+  el('flipMode').value = r.mode;
+  el('flipValue').value = r.value;
+  syncFlipPreview();
+  el('settingsDlg').showModal();
+}
+function syncFlipPreview(){
+  const mode = el('flipMode').value, val = Number(el('flipValue').value) || 1;
+  el('flipUnit').textContent = mode === 'pct' ? '%' : 'players';
+  const n = (Store.state && Store.state.order.length) || 1;
+  const need = Math.max(1, Math.min(mode === 'pct' ? Math.ceil(n*val/100) : val, n));
+  el('flipPreview').textContent = need <= 1
+    ? 'Anyone can flip instantly.'
+    : 'With ' + n + ' player' + (n===1?'':'s') + ' at the table, ' + need + ' have to ask before a tile turns.';
+}
+
+el('inviteCopy').onclick = ()=>{                       // inside the tap — this one always works
+  const inp = el('inviteLink');
+  inp.select(); inp.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(inp.value).catch(()=>{ try{ document.execCommand('copy'); }catch(e){} });
+  el('inviteCopy').textContent = 'Copied ✓';
+  toast('Invite link copied');
+};
+el('flipMode').addEventListener('change', syncFlipPreview);
+el('flipValue').addEventListener('input', syncFlipPreview);
+el('flipSave').onclick = async ()=>{
+  const mode = el('flipMode').value === 'pct' ? 'pct' : 'raw';
+  const value = Math.max(1, Math.min(Number(el('flipValue').value) || 1, mode === 'pct' ? 100 : 20));
+  el('settingsDlg').close();
+  await Store.mutate(st=>{ st.settings = { flipMode:mode, flipValue:value }; st.flipVotes = []; });
+  toast(mode === 'pct' ? 'Flip needs ' + value + '% of players' : 'Flip needs ' + value + ' player' + (value===1?'':'s'));
+  render();
+};
+
+el('resumeList').addEventListener('click', e=>{
+  const btn = e.target.closest && e.target.closest('.rgame');
+  if(btn) joinGame(btn.dataset.room);
+});
+el('idCopy').onclick = ()=>{
+  const inp = el('idField');
+  inp.select(); inp.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(PLAYER_ID).catch(()=>{ try{ document.execCommand('copy'); }catch(e){} });
+  toast('Player ID copied');
+};
+el('idUse').onclick = ()=>{
+  const v = (el('idPaste').value||'').trim();
+  if(v.length < 8) return toast('That does not look like an ID');
+  localStorage.setItem('ana_pid', v);
+  location.hash = '';
+  location.reload();
+};
 
 el('btnCreate').onclick = createGame;
 el('btnJoin').onclick   = ()=> joinGame(el('joinCode').value);
@@ -1007,7 +1294,9 @@ el('btnMenu').onclick = ()=> el('menuDlg').showModal();
 el('menuDlg').addEventListener('click', e=>{
   const act = e.target.dataset && e.target.dataset.act; if(!act) return;
   el('menuDlg').close();
-  if(act === 'share')  return Store.online ? copyLink() : toast('Solo practice — start a game to invite');
+  if(act === 'share')  return openInvite();
+  if(act === 'settings') return openSettings();
+  if(act === 'id'){ el('idField').value = PLAYER_ID; el('idPaste').value = ''; el('idDlg').showModal(); return; }
   if(act === 'help')   return el('helpDlg').showModal();
   if(act === 'rename'){ el('nameField').value = MY_NAME; el('nameDlg').showModal(); return; }
   if(act === 'end'){    if(confirm('End the game and show final scores?')) endGame(); return; }
@@ -1059,7 +1348,8 @@ document.addEventListener('keydown', e=>{
     await loadDict();
     Store.room = code; Store.online = true;
     await Store.pull();
-    if(!Store.state){ toast('That game has expired'); location.hash=''; return; }
+    if(!Store.state){ toast('That game has expired'); location.hash=''; renderResume(); return; }
+    rememberRoom(code);
     await Store.connect(code);
     if(!MY_NAME){                                        // ask who you are before announcing you
       el('nameField').value = '';
@@ -1077,6 +1367,7 @@ document.addEventListener('keydown', e=>{
     showGame(); render();
   }else{
     loadDict();                                          // warm the dictionary while they read the home screen
+    renderResume();
   }
 })();
 </script>
