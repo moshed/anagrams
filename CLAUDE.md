@@ -22,11 +22,11 @@ GitHub Pages from `main` root). Deploy = edit `index.html` + `git push`.
 - **Bag** = one of three tile sets (`TILE_SETS`), shuffled at game start and
   recorded in `state.settings.bagMix`; picked on the home screen or in
   ⋯ → Table settings (stored per browser in `ana_bag`, applied to the NEXT game):
-  - `scrabble` — 98 tiles, 43% vowels — **the default**
+  - `scrabble` — 98 tiles, 43% vowels
   - `bananagrams` — the real 144-tile Bananagrams mix, 42% vowels
-  - `lean` — 87 tiles, 36% vowels — Scrabble's consonants with the vowels
-    thinned; the only mix that actually plays drier (the other two are
-    within a point of each other, which surprises people)
+  - `lean` — 87 tiles, 36% vowels — **the default**. Scrabble's consonants with
+    the vowels thinned; the only mix that actually plays drier (the other two
+    are within a point of each other, which surprises people)
   Anyone can hit **Flip** to turn one tile face-up into the middle (500 ms
   global cooldown, blocked while a claim/penalty is live).
 - **Min word length 4** (`MIN_LEN`).
