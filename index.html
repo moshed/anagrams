@@ -211,6 +211,17 @@
   .stiles{margin-left:auto;font-weight:800}
 
   @media (max-height:680px){ .hero h1{font-size:32px} }
+  /* Full screen on purpose: the whole point is that nobody misses it, and the
+     table stays readable underneath so you can be looking at it. */
+  #flipCount{position:fixed; inset:0; z-index:60; display:flex; flex-direction:column;
+             align-items:center; justify-content:center; gap:8px;
+             background:rgba(0,0,0,.45); pointer-events:none}
+  #flipCount.hide{display:none}
+  #flipNum{font-size:96px; font-weight:900; color:#fff; line-height:1;
+           font-variant-numeric:tabular-nums; transform-origin:center}
+  #flipNum.beat{animation:flipbeat .18s ease-out}
+  @keyframes flipbeat{from{transform:scale(1.18)} to{transform:scale(1)}}
+  #flipLbl{font-size:15px; font-weight:800; color:rgba(255,255,255,.85)}
 </style>
 </head>
 <body>
@@ -388,6 +399,7 @@
   <button id="btnAgain" class="btn primary big">Play again</button>
 </div></dialog>
 
+<div id="flipCount" class="hide"><div id="flipNum">3</div><div id="flipLbl">Flipping…</div></div>
 <div id="toast"></div>
 
 <script>
@@ -731,6 +743,22 @@ function flipThreshold(st){
   const need = r.mode === 'pct' ? Math.ceil(n * r.value / 100) : r.value;
   return Math.max(1, Math.min(need, n));
 }
+/* A flip is CALLED, then lands three seconds later.
+ *
+ * Turning it there and then handed the person who pressed the button the
+ * letter a network round-trip before anyone else — a real head start in a game
+ * decided by who spots the word first. The deadline goes into shared state so
+ * every device counts to the same instant, and so the tile still turns if the
+ * caller closes their tab mid-count.
+ *
+ * `wowPendingFlip` is milliseconds, matching every other time in this schema,
+ * and is the same field the iOS app uses. */
+const FLIP_COUNTDOWN_MS = 3000;
+function callFlip(st){
+  st.wowPendingFlip = nowS() + FLIP_COUNTDOWN_MS;
+  st.flipVotes = [];
+  return true;
+}
 function turnTile(st){
   const L = st.bag.pop();
   st.mid.push(L);
@@ -742,19 +770,20 @@ async function doFlip(){
   await Store.mutate(st=>{
     if(st.ended || st.claim || st.penalty) return false;
     if(!st.bag.length) return false;
+    if(st.wowPendingFlip) return false;                 // one at a time
     if(!st.players[PLAYER_ID]) joinState(st);
     st.flipVotes = st.flipVotes || [];
     const need = flipThreshold(st);
     if(need <= 1){
       if(nowS() - (st.lastFlip||0) < FLIP_COOLDOWN) return false;
-      return turnTile(st);
+      return callFlip(st);
     }
     if(st.flipVotes.includes(PLAYER_ID)){                       // tap again = take your ask back
       st.flipVotes = st.flipVotes.filter(p => p !== PLAYER_ID);
       return;
     }
     st.flipVotes.push(PLAYER_ID);
-    if(st.flipVotes.length >= need) turnTile(st);
+    if(st.flipVotes.length >= need) callFlip(st);
   }, { once:true });
 }
 
@@ -962,6 +991,17 @@ async function abandonClaim(){
    sure exactly one of them lands it. */
 async function refereeTimers(){
   const st = Store.state; if(!st) return;
+  // Every device tries; the version check means exactly one wins.
+  if(st.wowPendingFlip && nowS() >= st.wowPendingFlip){
+    await Store.mutate(s=>{
+      if(!s.wowPendingFlip || nowS() < s.wowPendingFlip) return false;
+      s.wowPendingFlip = 0;
+      if(!s.bag.length) return true;                    // clear it even if the bag emptied
+      return turnTile(s);
+    }, { once:true });
+    render();
+    return;
+  }
   if(st.claim && nowS() > st.claim.deadline + 600){
     if(st.claim.pid === PLAYER_ID) closeClaim();
     await Store.mutate(s=>{
@@ -1157,6 +1197,19 @@ setInterval(()=>{
   if(st.penalty && st.penalty.pid === PLAYER_ID){
     const left = Math.max(0, st.penalty.deadline - nowS());
     el('penaltyClock').textContent = 'Auto-picks your shortest word in ' + Math.ceil(left/1000) + 's';
+  }
+  const pend = st.wowPendingFlip || 0;
+  const box = el('flipCount');
+  if(pend && nowS() < pend){
+    const n = Math.max(1, Math.ceil((pend - nowS()) / 1000));
+    const num = el('flipNum');
+    if(num.textContent !== String(n)){
+      num.textContent = n;
+      num.classList.remove('beat'); void num.offsetWidth; num.classList.add('beat');
+    }
+    box.classList.remove('hide');
+  } else if(!box.classList.contains('hide')){
+    box.classList.add('hide');
   }
   refereeTimers();
 }, 100);
