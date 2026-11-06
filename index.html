@@ -65,6 +65,28 @@
     background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 10px;cursor:pointer;
   }
   .iconbtn{background:transparent;border:0;font-size:20px;padding:6px 8px;cursor:pointer;line-height:1}
+  /* chat (same as the iPhone app: comments, @tags, nudges) */
+  .chatbtn{position:relative}
+  .chatbtn .badge{position:absolute;top:0;right:0;min-width:16px;height:16px;border-radius:8px;background:#e5484d;color:#fff;
+                  font:800 10px/16px system-ui;padding:0 4px;box-sizing:border-box}
+  .chatbox{display:flex;flex-direction:column;height:min(70vh,560px);width:min(92vw,440px)}
+  .chatlist{flex:1;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:4px}
+  .msg{max-width:78%;padding:7px 11px;border-radius:15px;font:15px/1.35 system-ui;word-wrap:break-word}
+  .msg.mine{align-self:flex-end;background:#2f6fed;color:#fff}
+  .msg.theirs{align-self:flex-start;background:rgba(127,127,127,.18)}
+  .msg .who{display:block;font:600 11px/1.3 system-ui;opacity:.7;margin-bottom:1px}
+  .msg .tag{font-weight:700;color:#2f6fed}
+  .msg.mine .tag{color:#fff}
+  .nudgeline{align-self:center;font:600 12px/1.4 system-ui;color:#e08a00;padding:3px 0}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0}
+  .chipbtn{border:0;border-radius:14px;padding:4px 11px;font:600 13px/1.3 system-ui;cursor:pointer}
+  .chipbtn.tag{background:rgba(47,111,237,.15);color:#2f6fed}
+  .chipbtn.nudge{background:rgba(224,138,0,.16);color:#e08a00}
+  .chipbtn:disabled{opacity:.45}
+  .chatin{display:flex;gap:8px;align-items:center}
+  .chatin input{flex:1;border-radius:18px;border:1px solid rgba(127,127,127,.35);padding:9px 14px;font:15px system-ui;background:transparent;color:inherit}
+  .chatpeek{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;border-radius:14px;
+            padding:9px 14px;font:600 14px/1.3 system-ui;max-width:90vw;z-index:50;cursor:pointer}
 
   /* ---------- home ---------- */
   #home{flex:1;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:18px;max-width:520px;margin:0 auto;width:100%}
@@ -267,6 +289,7 @@
       <div class="logo">Ana<b>grams</b></div>
       <div class="grow"></div>
       <button id="roomTag" class="roomtag">····</button>
+      <button id="btnChat" class="iconbtn chatbtn hide" title="Chat" aria-label="Chat">💬<span id="chatBadge" class="badge hide"></span></button>
       <button id="btnMenu" class="iconbtn">⋯</button>
     </header>
 
@@ -310,7 +333,7 @@
   <button data-act="settings">Flip settings</button>
   <button data-act="id">My player ID (play on another device)</button>
   <button data-act="help">How to play</button>
-  <button data-act="end">End game &amp; show scores</button>
+  <button data-act="end" id="menuEnd">Vote to end game</button>
   <button data-act="leave">Leave game</button>
   <button data-act="close" class="muted">Close</button>
 </div></dialog>
@@ -385,6 +408,17 @@
   </div>
 </div></dialog>
 
+<dialog id="chatDlg"><div class="dlg chatbox">
+  <div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">Chat</h3>
+    <button id="chatClose" class="iconbtn" aria-label="Close">✕</button></div>
+  <div id="chatList" class="chatlist"></div>
+  <div id="chatNudge" class="chips"></div>
+  <div id="chatTags" class="chips hide"></div>
+  <div class="chatin"><input id="chatInput" placeholder="Message, or @ to tag" autocomplete="off" maxlength="500" />
+    <button id="chatSend" class="btn primary">Send</button></div>
+</div></dialog>
+<div id="chatPeek" class="chatpeek hide"></div>
+
 <dialog id="penaltyDlg"><div class="dlg">
   <h3>Ouch — pick a word to lose</h3>
   <p id="penaltyWhy">Your letters go back to the middle.</p>
@@ -420,11 +454,22 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const TABLE = "ana_games";
 const REST  = SUPABASE_URL + "/rest/v1/" + TABLE;
 
-const MIN_LEN      = 4;
+const MIN_LEN      = 4;      // the default; a table may ask for more
+/* Each table's own rules, set by whoever started it (the iPhone app lets the
+   host choose). Same keys and meaning as the app. Old tables: 4 letters, penalty on. */
+const minLenOf   = st => (st && st.settings && st.settings.minLen) || MIN_LEN;
+const penaltyOn  = st => !(st && st.settings && st.settings.penalty === false);
+const wordPoints = st => !!(st && st.settings && st.settings.scoring === 'points');
+const scoreOf    = (st, p) => ((p && p.words) || []).reduce((n, w) =>
+  n + (wordPoints(st) ? Math.max(1, w.w.length - minLenOf(st) + 1) : w.w.length), 0);
+const scoreUnit  = st => wordPoints(st) ? 'pts' : 'tiles';
+const flipByVote = st => { const r = flipRule(st); return r.mode === 'pct' ? r.value >= 100 : r.value > 1; };
+const rulesText  = st => minLenOf(st) + '+ letters · ' + (penaltyOn(st) ? 'penalty' : 'no penalty')
+                         + (wordPoints(st) ? ' · word points' : '') + (flipByVote(st) ? ' · flip by vote' : '');
 const CLAIM_START  = 5000;   // ms you get to start typing
 const CLAIM_PER    = 2000;   // ms added per letter typed
 const CLAIM_CAP    = 30000;  // hard ceiling on one claim
-const PENALTY_MS   = 20000;  // time to pick the word you lose
+const PENALTY_MS   = 10*365*24*3600*1000;  // no time limit to pick the word you lose (same as the app)
 const FLIP_COOLDOWN= 500;
 const POLL_MS      = 1500;
 
@@ -485,7 +530,11 @@ async function loadDict(){
         const arr = await r.json();
         const s = new Set();
         for(const w of arr) if(w.length >= MIN_LEN && /^[a-z]+$/.test(w)) s.add(w);
-        if(s.size > 1000){ DICT.set = s; return s; }
+        if(s.size > 1000){
+          // ENABLE words the shared list lacks (anagram-extra.txt), same as the app
+          try{ const x = await fetch('anagram-extra.txt'); if(x.ok) for(const w of (await x.text()).split('\n')) if(w) s.add(w); }catch(e){}
+          DICT.set = s; return s;
+        }
       }catch(e){}
     }
     DICT.set = new Set();   // dictionary unreachable: everything gets rejected, so warn
@@ -497,55 +546,137 @@ async function loadDict(){
 const isWord = w => DICT.set && DICT.set.has(w.toLowerCase());
 
 /* ============================================================
-   Letter maths
+   Same-root rule — a straight port of the iPhone app's AnaRules (2026-11-06),
+   so a steal gets the same verdict on every device:
+     1. endings (S, ES, ED, ER, EN, EST, ING, IES, D), two stacked endings, y→i
+     2. MorphoLex core (anagram-roots.txt): same core = same root
+     3. for words MorphoLex lacks: word-making endings and common prefixes
+     4. Jev may UNBLOCK a word + ending look-alike (FLOW→FLOWER), via wow/root,
+        shared by every player in wow_root_verdicts
    ============================================================ */
-function counts(letters){
-  const c = {};
-  const arr = typeof letters === 'string' ? letters.split('') : letters;
-  for(const ch of arr) c[ch] = (c[ch]||0) + 1;
-  return c;
-}
-function subset(a, b){                       // every letter of a available in b
-  for(const k in a) if((b[k]||0) < a[k]) return false;
-  return true;
-}
-function minus(a, b){                        // a - b (assumes subset)
-  const o = {};
-  for(const k in a){ const n = a[k] - (b[k]||0); if(n > 0) o[k] = n; }
-  return o;
-}
-function spread(c){                          // {A:2,B:1} -> ['A','A','B']
-  const out = [];
-  for(const k in c) for(let i=0;i<c[k];i++) out.push(k);
-  return out;
-}
-const total = c => Object.values(c).reduce((s,n)=>s+n,0);
-
-/* ---------- "did the root really change?" ----------
-   We block the pure inflections: plural, verb tense/-ing, and
-   comparative/superlative. Anything that needs a different stem
-   is a fair steal. Handles the usual spelling wrinkles:
-   e-drop (bake→baked), doubling (run→running), y→i (city→cities). */
-const INFLECTIONS = ['ies','ied','iest','ier','ings','ers','est','ing','ies','es','ed','er','en','s','d','n'];
-function stems(w){
-  const out = new Set([w]);
-  for(const suf of INFLECTIONS){
-    if(!w.endsWith(suf)) continue;
-    const base = w.slice(0, w.length - suf.length);
-    if(base.length < 2) continue;
-    out.add(base);
-    out.add(base + 'e');                                  // hoping→hope, baked→bake
-    if(/(.)\1$/.test(base)) out.add(base.slice(0,-1));    // running→run, batted→bat
-    if(suf[0] === 'i') out.add(base + 'y');               // cities→city, happier→happy
+function rootsOf(w){
+  const out = new Set();
+  for(const suf of ['ies','ing','est','es','ed','er','en','s','d']){
+    if(!w.endsWith(suf) || w.length <= suf.length + 1) continue;
+    const stem = w.slice(0, -suf.length);
+    out.add(stem); out.add(stem + 'e');
+    if(suf === 'ies') out.add(stem + 'y');
+    if(['ed','er','est'].includes(suf) && stem.endsWith('i') && stem.length >= 3) out.add(stem.slice(0,-1) + 'y');
+    if(stem.length >= 2 && stem[stem.length-1] === stem[stem.length-2]) out.add(stem.slice(0,-1));
   }
   return out;
+}
+const ROOTS = { core:null, unblocked:new Set(), asked:new Map() };
+async function loadRoots(){
+  if(ROOTS.core) return;
+  ROOTS.core = new Map();
+  try{
+    const r = await fetch('anagram-roots.txt');
+    if(r.ok) for(const line of (await r.text()).split('\n')){
+      const sp = line.indexOf(' '); if(sp > 0) ROOTS.core.set(line.slice(0, sp), +line.slice(sp+1));
+    }
+  }catch(e){}
+  try{
+    const r = await fetch(SUPABASE_URL + '/rest/v1/wow_root_verdicts?unblock=is.true&select=short,long',
+                          { headers:{ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY } });
+    if(r.ok) for(const x of await r.json()) ROOTS.unblocked.add(x.short + '|' + x.long);
+  }catch(e){}
+}
+function coreOf(w){
+  if(!ROOTS.core) return null;
+  if(ROOTS.core.has(w)) return ROOTS.core.get(w);
+  for(const r of rootsOf(w)) if(ROOTS.core.has(r)) return ROOTS.core.get(r);
+  return null;
+}
+const DERIVED = ['ically','ally','ness','less','like','ful','fully','able','ible','ably','ibly','ism','isms','ist','ists',
+  'ity','ities','ize','ise','ized','ised','izes','ises','izing','ising','ly','ily','ment','ments','ers','ors','or','ings',
+  'ish','ive','ative','ion','ions','ation','ations','ional','al','ical','ic','ship','ships','dom','doms','hood','hoods'];
+function derivedBases(long){
+  const out = new Set();
+  for(const form of new Set([long, ...rootsOf(long)])){
+    for(const suf of DERIVED){
+      if(!form.endsWith(suf) || form.length - suf.length < 3) continue;
+      const base = form.slice(0, -suf.length);
+      if(suf === 'ily'){ out.add(base + 'y'); continue; }
+      out.add(base);
+      if('aeiou'.includes(suf[0])){ out.add(base + 'e'); out.add(base + 'y'); }
+      if(base.endsWith('i')) out.add(base.slice(0,-1) + 'y');
+    }
+  }
+  return out;
+}
+const FALLBACK_PREFIXES = ['counter','under','super','inter','multi','anti','over','trans','fore','post','self','semi',
+  'non','mis','pre','out','dis','sub','mid','un','re','co','de','in','im','en','em'];
+function ruleBlocks(short, long){
+  const r1 = rootsOf(long);
+  if(r1.has(short)) return true;
+  if(long.endsWith('s')){
+    const inner = long.slice(0,-1);
+    if((inner.endsWith('er') || inner.endsWith('ing')) && rootsOf(inner).has(short)) return true;
+  }
+  const cs = coreOf(short), cl = coreOf(long);
+  if(cs !== null && cl !== null && cs === cl) return true;
+  if(cl === null){
+    const rs = rootsOf(short);
+    for(const b of derivedBases(long)) if(b === short || rs.has(b)) return true;
+    for(const p of FALLBACK_PREFIXES){
+      if(!long.startsWith(p)) continue;
+      const rest = long.slice(p.length);
+      if(rest.length < 3) continue;
+      if(rest === short || rootsOf(rest).has(short) || rootsOf(short).has(rest)) return true;
+      const cr = coreOf(rest);
+      if(cr !== null && cr === coreOf(short)) return true;
+    }
+  }
+  return false;
+}
+function isEnding(short, long){
+  return long.length > short.length && long.length - short.length <= 5
+    && (long.startsWith(short) || (short.length > 3 && long.startsWith(short.slice(0,-1))));
+}
+function isUnblocked(short, long){
+  if(ROOTS.unblocked.has(short + '|' + long)) return true;
+  for(const b of rootsOf(long)) if(b.length > short.length && ROOTS.unblocked.has(short + '|' + b)) return true;
+  return false;
 }
 function sameRoot(a, b){
   a = a.toLowerCase(); b = b.toLowerCase();
   if(a === b) return true;
-  const A = stems(a), B = stems(b);
-  for(const s of A) if(B.has(s)) return true;
-  return false;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if(!ruleBlocks(short, long)) return false;
+  if(isEnding(short, long) && isUnblocked(short, long)) return false;
+  return true;
+}
+/* Ask Jev about one pair (once per pair; the answer is shared by everyone). */
+function askRoot(short, long){
+  const k = short + '|' + long;
+  if(ROOTS.asked.has(k)) return ROOTS.asked.get(k);
+  const p = (async ()=>{
+    try{
+      const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), 4000);
+      const r = await fetch(SUPABASE_URL + '/functions/v1/wow/root', { method:'POST', signal:ctl.signal,
+        headers:{ 'Content-Type':'application/json', apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY },
+        body:JSON.stringify({ short, long }) });
+      clearTimeout(t);
+      if(r.ok && (await r.json()).unblock) ROOTS.unblocked.add(k);
+    }catch(e){ ROOTS.asked.delete(k); }
+  })();
+  ROOTS.asked.set(k, p);
+  return p;
+}
+/* Before a steal is judged: ask Jev about each word on the table this word
+   could steal that the rule blocks only as a word + ending. Same as the app. */
+async function judgeSteals(word, st){
+  const w = word.toLowerCase(), wc = counts(word.toUpperCase()), asks = [];
+  for(const pid of st.order){
+    const p = st.players[pid]; if(!p) continue;
+    for(const e of p.words){
+      const src = e.w.toLowerCase();
+      if(src.length >= w.length || !subset(counts(e.w), wc)) continue;
+      if(isEnding(src, w) && ruleBlocks(src, w) && !isUnblocked(src, w)) asks.push(askRoot(src, w));
+    }
+  }
+  if(asks.length) await Promise.all(asks);
 }
 
 /* ============================================================
@@ -559,9 +690,12 @@ function shuffledBag(mix){
 }
 function freshState(mix){
   mix = bagKey(mix);
-  return { v:1, started:true, ended:false, bag:shuffledBag(mix), mid:[],
-           players:{}, order:[], claim:null, penalty:null, lastFlip:0, log:[], seq:0,
-           settings:{ bagMix:mix } };
+  // a new table opens with (shortest word - 1) tiles face up, like the app
+  const bag = shuffledBag(mix), mid = bag.splice(0, MIN_LEN - 1);
+  return { v:1, started:true, ended:false, bag, mid,
+           players:{}, order:[], claim:null, penalty:null, lastFlip:0,
+           log:[{ id:1, t:nowS(), type:'open', letter:mid.join('') }], seq:1,
+           conceded:[], endWhy:'', settings:{ bagMix:mix } };
 }
 /* A forfeited word goes back UNFLIPPED — shuffled into the bag, not dumped on
    the table for the next player to pick straight back up. */
@@ -581,7 +715,7 @@ const tilesOf = p => p.words.reduce((s,w)=> s + w.w.length, 0);
    Returns {type:'new'} | {type:'steal',from,src,uses} | {bad:'reason'} */
 function findMove(word, st){
   const w = word.toUpperCase();
-  if(w.length < MIN_LEN) return { bad:'Words must be at least ' + MIN_LEN + ' letters' };
+  if(w.length < minLenOf(st)) return { bad:'Words must be at least ' + minLenOf(st) + ' letters' };
   if(!/^[A-Z]+$/.test(w)) return { bad:'Letters only' };
   if(!isWord(w)) return { bad:'"' + w + '" is not in the word list' };
 
@@ -766,7 +900,36 @@ function turnTile(st){
   st.flipVotes = [];
   addLog(st, { type:'flip', letter:L });
 }
+/* Players not at the table: no heartbeat (wowSeen, seconds) in the last 45 s.
+   Same rule as the app: nobody flips or calls a word while someone is away. */
+const AWAY_S = 45;
+function awayNames(st){
+  if(!st || st.ended || !Store.online) return [];
+  const seen = st.wowSeen || {}, now = nowS() / 1000;
+  return (st.order || []).filter(pid => pid !== PLAYER_ID && now - (seen[pid] || 0) >= AWAY_S)
+                         .map(pid => (st.players[pid] || {}).name || 'Someone');
+}
+function blockIfAway(){
+  const away = awayNames(Store.state);
+  if(away.length){ toast(away[0] + (away.length > 1 ? ' and others aren\'t' : ' isn\'t') + ' at the table'); return true; }
+  return false;
+}
+/* My heartbeat, so the app (and other browsers) know I'm at the table. */
+async function beat(){
+  if(!Store.online || !Store.state || document.visibilityState !== 'visible') return;
+  await Store.mutate(st=>{ if(!st.players[PLAYER_ID]) return false;
+                            st.wowSeen = st.wowSeen || {}; st.wowSeen[PLAYER_ID] = nowS() / 1000; }, { once:true });
+}
+setInterval(beat, 20000);
+document.addEventListener('visibilitychange', ()=>{
+  if(!Store.online || !Store.state) return;
+  if(document.visibilityState === 'visible') beat();
+  else Store.mutate(st=>{ if(!st.players[PLAYER_ID]) return false;     // left the table: say so at once
+                          st.wowSeen = st.wowSeen || {}; st.wowSeen[PLAYER_ID] = 0; }, { once:true });
+});
+
 async function doFlip(){
+  if(blockIfAway()) return;
   await Store.mutate(st=>{
     if(st.ended || st.claim || st.penalty) return false;
     if(!st.bag.length) return false;
@@ -792,6 +955,7 @@ async function doFlip(){
    you the keyboard. We claim optimistically and undo if the table says no. */
 async function doClaim(){
   const st0 = Store.state;
+  if(blockIfAway()) return false;
   if(!st0 || st0.ended || st0.penalty || st0.claim){
     if(st0 && st0.claim) toast((st0.claim.name || 'Someone') + ' called it first!');
     return false;
@@ -804,6 +968,7 @@ async function doClaim(){
     if(!st.players[PLAYER_ID]) joinState(st);
     st.claim = { pid:PLAYER_ID, name:st.players[PLAYER_ID].name,
                  start:nowS(), deadline:nowS() + CLAIM_START, len:0 };
+    st.wowPendingFlip = 0;                            // a flip counting down must not land mid-claim
     addLog(st, { type:'claim', pid:PLAYER_ID, name:st.players[PLAYER_ID].name });
   }, { once:true });
   Claim.pending = false;
@@ -856,7 +1021,7 @@ function previewMove(w){
   const hint = el('claimHint');
   const tile = (L, fromMid) => '<span class="minitile' + (fromMid ? ' mid' : '') + '">' + L + '</span>';
   if(!w){ hint.innerHTML = ''; return; }
-  if(w.length < MIN_LEN){ hint.innerHTML = '<span class="hintbad">' + MIN_LEN + ' letters minimum</span>'; return; }
+  if(w.length < minLenOf(Store.state)){ hint.innerHTML = '<span class="hintbad">' + minLenOf(Store.state) + ' letters minimum</span>'; return; }
   const m = findMove(w, Store.state);
   if(m.bad){ hint.innerHTML = '<span class="hintbad">' + esc(m.bad) + '</span>'; return; }
   if(m.type === 'new'){
@@ -889,6 +1054,7 @@ async function submitWord(){
   const w = el('claimInput').value.replace(/[^a-zA-Z]/g,'').toUpperCase();
   if(!w) return;
   if(nowS() > Claim.deadline + 400){ return; }         // the ticker will penalise us
+  await judgeSteals(w, Store.state);                   // FLOW→FLOWER etc: Jev's verdict first
   const move = findMove(w, Store.state);
   if(move.bad){
     el('claimErr').textContent = move.bad;
@@ -957,7 +1123,7 @@ async function enqueueSteal(victim, src, into){
         dedup: `steal-${src}-${into}`
       })
     });
-    fetch(SUPABASE_URL + '/functions/v1/wow-push', {
+    fetch(SUPABASE_URL + '/functions/v1/wow/push', {
       method:'POST', headers:{ Authorization:'Bearer '+SUPABASE_ANON_KEY, 'Content-Type':'application/json' },
       body:'{}'
     }).catch(()=>{});
@@ -970,6 +1136,7 @@ function startPenalty(st, pid, why, word){
   addLog(st, Object.assign({ type:'miss', pid, name:(p&&p.name)||'Player', why:why||'' },
                            word ? { word } : {}));
   if(!p || !p.words.length) return;                     // nothing to lose
+  if(!penaltyOn(st)) return;                            // this table plays without the penalty
   st.penalty = { pid, deadline:nowS() + PENALTY_MS, why:why||'' };
 }
 
@@ -1037,9 +1204,21 @@ async function refereeTimers(){
   }
 }
 
+/* End game is a vote, like the app: it ends only when every player agrees.
+   Tapping again takes the vote back. */
 async function endGame(){
-  await Store.mutate(st=>{ if(st.ended) return false; st.ended = true; st.claim = null; st.penalty = null;
-                           addLog(st, { type:'end' }); });
+  await Store.mutate(st=>{
+    if(st.ended || !st.players[PLAYER_ID]) return false;
+    st.conceded = (st.conceded || []).filter(p => st.players[p]);
+    if(st.conceded.includes(PLAYER_ID)){ st.conceded = st.conceded.filter(p => p !== PLAYER_ID); return; }
+    st.conceded.push(PLAYER_ID);
+    if(st.order.every(p => st.conceded.includes(p))){
+      st.ended = true; st.claim = null; st.penalty = null; st.wowPendingFlip = 0;
+      st.endWhy = 'Everyone agreed to end';
+      addLog(st, { type:'end', why:st.endWhy });
+    }
+  }, { once:true });
+  render();
 }
 
 /* ============================================================
@@ -1102,7 +1281,7 @@ function render(){
         .map(w=> '<span class="chip">' + w.w + '</span>').join('');
       return '<div class="' + cls + '">' +
                '<div class="phead"><span class="pname">' + esc(p.name||'Player') + (pid===PLAYER_ID?' (you)':'') + '</span>' +
-               '<span class="ptiles">' + tilesOf(p) + '</span></div>' +
+               '<span class="ptiles">' + scoreOf(st, p) + '</span></div>' +
                '<div class="pwords' + (p.words.length > 8 ? ' dense' : '') + '">' +
                  (words || '<span class="muted" style="font-size:11px">no words yet</span>') + '</div>' +
              '</div>';
@@ -1115,8 +1294,15 @@ function render(){
   const busy = !!(st.claim || st.penalty) || st.ended;
   el('btnFlip').disabled = busy || !st.bag.length;
   const need = flipThreshold(st), votes = (st.flipVotes || []).length;
+  const ends = (st.conceded || []).filter(p => st.players[p]).length;
   el('bagLeft').textContent = (need > 1 ? votes + '/' + need + ' asked · ' : '') +
-                              (st.bag.length ? st.bag.length + ' left' : 'bag empty');
+                              (st.bag.length ? st.bag.length + ' left' : 'bag empty') +
+                              (ends ? ' · ' + ends + '/' + st.order.length + ' to end' : '') +
+                              // only when a table changed the usual rules
+                              (minLenOf(st) !== MIN_LEN || !penaltyOn(st) || wordPoints(st) ? ' · ' + rulesText(st) : '');
+  { const mine = (st.conceded || []).includes(PLAYER_ID);
+    el('menuEnd').textContent = (mine ? 'Take back my End game vote' : 'Vote to end game') +
+                                ' (' + ends + '/' + st.order.length + ' agreed)'; }
   const wb = el('btnWord');
   wb.disabled = busy;
   wb.textContent = st.ended ? 'GAME OVER'
@@ -1176,12 +1362,12 @@ function sizeTiles(){
 window.addEventListener('resize', ()=>{ sizeTiles(); });
 
 function showStandings(st){
-  const rows = st.order.map(pid=>({ p:st.players[pid], t:tilesOf(st.players[pid]||{words:[]}) }))
+  const rows = st.order.map(pid=>({ p:st.players[pid], t:scoreOf(st, st.players[pid]||{words:[]}) }))
                        .filter(r=>r.p).sort((a,b)=> b.t - a.t);
   el('standings').innerHTML = rows.map((r,i)=>
     '<div class="standing"><span class="rank">' + (i===0 ? '🏆' : (i+1)) + '</span>' +
     '<span>' + esc(r.p.name||'Player') + '</span>' +
-    '<span class="stiles">' + r.t + ' tiles</span></div>' +
+    '<span class="stiles">' + r.t + ' ' + scoreUnit(st) + '</span></div>' +
     '<div class="muted" style="font-size:12px;padding:0 0 6px 36px">' +
       (r.p.words.map(w=>w.w).join(' · ') || '—') + '</div>'
   ).join('');
@@ -1205,7 +1391,7 @@ setInterval(()=>{
   }
   if(st.penalty && st.penalty.pid === PLAYER_ID){
     const left = Math.max(0, st.penalty.deadline - nowS());
-    el('penaltyClock').textContent = 'Auto-picks your shortest word in ' + Math.ceil(left/1000) + 's';
+    el('penaltyClock').textContent = 'No rush — pick one when you are ready.';
   }
   const pend = st.wowPendingFlip || 0;
   const box = el('flipCount');
@@ -1307,6 +1493,7 @@ async function createGame(){
   }
   if(Store.online){ location.hash = 'r=' + Store.room; rememberRoom(Store.room); await Store.connect(Store.room); }
   showGame(); render();
+  if(Store.online){ beat(); chatStart(Store.room); }
   if(Store.online) openInvite();
 }
 
@@ -1330,7 +1517,7 @@ async function joinGame(code){
   if(code.length !== 4) return toast('Enter the 4-letter code');
   MY_NAME = (el('nameInput').value || '').trim().slice(0,14) || MY_NAME || 'Player';
   localStorage.setItem('ana_name', MY_NAME);
-  await loadDict();
+  await Promise.all([loadDict(), loadRoots()]);
   Store.room = code; Store.online = true;
   await Store.pull();
   if(!Store.state){ Store.online = false; Store.room = null; return toast('No game with code ' + code + ' — check the code, or ask for the link'); }
@@ -1338,7 +1525,7 @@ async function joinGame(code){
   rememberRoom(code);
   await Store.connect(code);
   await Store.mutate(joinState);
-  showGame(); render();
+  showGame(); render(); beat(); chatStart(code);
 }
 
 async function copyLink(){
@@ -1442,7 +1629,11 @@ el('menuDlg').addEventListener('click', e=>{
   if(act === 'id'){ el('idField').value = PLAYER_ID; el('idPaste').value = ''; el('idDlg').showModal(); return; }
   if(act === 'help')   return el('helpDlg').showModal();
   if(act === 'rename'){ el('nameField').value = MY_NAME; el('nameDlg').showModal(); return; }
-  if(act === 'end'){    if(confirm('End the game and show final scores?')) endGame(); return; }
+  if(act === 'end'){
+    const mine = (Store.state && (Store.state.conceded || []).includes(PLAYER_ID));
+    if(mine || confirm('Vote to end the game? It ends only when every player agrees.')) endGame();
+    return;
+  }
   if(act === 'leave'){  location.hash = ''; location.reload(); }
 });
 
@@ -1470,7 +1661,12 @@ el('btnAgain').onclick = async ()=>{
     const fresh = freshState((st.settings && st.settings.bagMix) || myBagChoice());
     fresh.settings = Object.assign({}, st.settings, fresh.settings);   // keep the flip rule
     for(const pid of st.order){ fresh.players[pid] = { name:names[pid], words:[], joined:nowS() }; fresh.order.push(pid); }
-    Object.assign(st, fresh);
+    // keep the log (a replay starts after the last restart), open with the table's own minimum
+    const log = st.log || [], seq = st.seq || 0;
+    fresh.bag = fresh.bag.concat(fresh.mid); fresh.mid = fresh.bag.splice(0, minLenOf(fresh) - 1);
+    Object.assign(st, fresh, { log, seq, wowSeen:st.wowSeen || {} });
+    addLog(st, { type:'restart', pid:PLAYER_ID, name:(names[PLAYER_ID] || 'Player') });
+    addLog(st, { type:'open', letter:st.mid.join('') });
   });
   lastWordKey = ''; lastMidLen = 0; render();
 };
@@ -1483,6 +1679,161 @@ document.addEventListener('keydown', e=>{
   if(e.key === 'Enter'){ e.preventDefault(); doClaim(); }
 });
 
+/* ============================================================
+   Chat — same as the iPhone app (wow_comments): comments, @tags, nudges.
+   A tag is stored as @[player id]; only a tagged or nudged player gets a push.
+   ============================================================ */
+const Chat = { msgs:[], open:false, chan:null, room:null, nudged:new Set(), tags:{}, peekT:0 };
+const REST_C = SUPABASE_URL + '/rest/v1/wow_comments';
+const chatSeenKey = () => 'ana_chat_seen_' + Chat.room;
+function chatPlayers(){
+  const st = Store.state; if(!st) return [];
+  return st.order.filter(p => p !== PLAYER_ID && st.players[p]).map(p => ({ id:p, name:st.players[p].name || 'Player' }));
+}
+function chatName(id){
+  if(id === PLAYER_ID) return MY_NAME || 'You';
+  const p = Store.state && Store.state.players[id];
+  return (p && p.name) || 'a player';
+}
+function chatHTML(body, mine){
+  return esc(body).replace(/@\[([^\]\s]+)\]/g, (_, id) => '<span class="tag">@' + esc(chatName(id)) + '</span>')
+                  .replace(/@all\b/g, '<span class="tag">@all</span>');
+}
+const chatPlain = body => body.replace(/@\[([^\]\s]+)\]/g, (_, id) => chatName(id)).replace(/@all\b/g, 'everyone');
+function chatAdd(m, live){
+  if(!m || Chat.msgs.some(x => x.id === m.id)) return;
+  Chat.msgs.push(m); Chat.msgs.sort((a,b) => a.id - b.id);
+  if(Chat.open){ chatMarkRead(); chatRender(); } else chatBadge();
+  if(live && !Chat.open && m.player_id !== PLAYER_ID) chatPeek(m);
+}
+function chatMarkRead(){ const l = Chat.msgs[Chat.msgs.length-1]; if(l) localStorage.setItem(chatSeenKey(), l.id); chatBadge(); }
+function chatBadge(){
+  const seen = +(localStorage.getItem(chatSeenKey()) || 0);
+  const n = Chat.msgs.filter(m => m.player_id !== PLAYER_ID && m.id > seen).length;
+  const b = el('chatBadge'); b.textContent = n > 99 ? '99' : n; b.classList.toggle('hide', !n);
+}
+function chatPeek(m){
+  const p = el('chatPeek');
+  p.textContent = m.kind === 'nudge' ? chatName(m.player_id) + ' nudged ' + (m.mentions.includes(PLAYER_ID) ? 'you' : 'the table')
+                                     : (m.name || chatName(m.player_id)) + ': ' + chatPlain(m.body);
+  p.classList.remove('hide'); clearTimeout(Chat.peekT);
+  Chat.peekT = setTimeout(() => p.classList.add('hide'), 4000);
+}
+function chatRender(){
+  const list = el('chatList');
+  list.innerHTML = Chat.msgs.length ? Chat.msgs.map(m => {
+    if(m.kind === 'nudge'){
+      const who = m.player_id === PLAYER_ID ? 'You' : esc(m.name || chatName(m.player_id));
+      const whom = m.mentions.map(id => id === PLAYER_ID ? 'you' : esc(chatName(id))).join(', ');
+      return '<div class="nudgeline">👋 ' + who + ' nudged ' + whom + '</div>';
+    }
+    const mine = m.player_id === PLAYER_ID;
+    return '<div class="msg ' + (mine ? 'mine' : 'theirs') + '">' +
+             (mine ? '' : '<span class="who">' + esc(m.name || chatName(m.player_id)) + '</span>') +
+             chatHTML(m.body, mine) + '</div>';
+  }).join('') : '<p class="muted" style="text-align:center;margin:auto">No messages yet. Tag a player with @, or nudge them.</p>';
+  list.scrollTop = list.scrollHeight;
+  const ps = chatPlayers();
+  el('chatNudge').innerHTML = ps.length ? '<span class="muted" style="font-size:12px;align-self:center">Nudge</span>' +
+    (ps.length > 1 ? '<button class="chipbtn nudge" data-nudge="*">👋 All</button>' : '') +
+    ps.map(p => '<button class="chipbtn nudge" data-nudge="' + esc(p.id) + '"' + (Chat.nudged.has(p.id) ? ' disabled' : '') + '>' +
+                (Chat.nudged.has(p.id) ? '✓ ' : '👋 ') + esc(p.name) + '</button>').join('') : '';
+}
+async function chatLoad(){
+  try{
+    const r = await fetch(REST_C + '?game=eq.ana&room=eq.' + encodeURIComponent(Chat.room) + '&order=id.asc&limit=500',
+                          { headers:Store.headers() });
+    if(r.ok){ Chat.msgs = await r.json(); if(Chat.open) chatRender(); chatBadge(); }
+  }catch(e){}
+}
+function chatStart(room){
+  if(!room || Chat.room === room) return;
+  Chat.room = room; Chat.msgs = [];
+  el('btnChat').classList.remove('hide');
+  chatLoad();
+  try{
+    if(Store.sb) Chat.chan = Store.sb.channel('chat:' + room)
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'wow_comments', filter:'room=eq.' + room },
+          payload => { const m = payload.new; if(m && m.game === 'ana') chatAdd(m, true); })
+      .subscribe(status => { if(status === 'SUBSCRIBED') chatLoad(); });   // catch up after a reconnect
+  }catch(e){}
+  setInterval(()=>{ if(document.visibilityState === 'visible') chatLoad(); }, 30000);   // safety net
+}
+async function chatPost(kind, body, mentions){
+  try{
+    const r = await fetch(REST_C, { method:'POST', headers:Store.headers({ Prefer:'return=representation' }),
+      body:JSON.stringify({ game:'ana', room:Chat.room, player_id:PLAYER_ID, name:(MY_NAME || 'Player').slice(0,40),
+                            kind, body:body.slice(0,1000), mentions }) });
+    if(!r.ok){ toast('Message not sent'); return false; }
+    const [m] = await r.json(); chatAdd(m, false); return true;
+  }catch(e){ toast('Message not sent'); return false; }
+}
+/* the server checks push text: no links, no @ : / < > ", one line */
+function pushSafe(t){
+  const c = t.replace(/\n/g,' ').replace(/[\/:@<>\\"]/g,' ').replace(/\.(?=\S)/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
+  return c || '(a message)';
+}
+async function chatPush(to, kind, body){
+  if(!/^p_[a-z0-9]+_[0-9]+$/.test(to)) return;           // only app players have phones
+  try{
+    await fetch(SUPABASE_URL + '/rest/v1/wow_push_queue', { method:'POST',
+      headers:Store.headers({ Prefer:'return=minimal' }),
+      body:JSON.stringify({ to_player:to, game:'ana', kind, title:'Anagrams · table ' + Chat.room, body, room:Chat.room,
+                            from_player:PLAYER_ID,
+                            dedup: kind + '-' + PLAYER_ID + '-' + to + '-' + Chat.room + '-' +
+                                   (kind === 'nudge' ? Math.floor(Date.now()/300000) : Date.now()) }) });
+    fetch(SUPABASE_URL + '/functions/v1/wow/push', { method:'POST',
+      headers:{ Authorization:'Bearer '+SUPABASE_ANON_KEY, 'Content-Type':'application/json' }, body:'{}' }).catch(()=>{});
+  }catch(e){}
+}
+async function chatSend(){
+  let text = el('chatInput').value.trim(); if(!text) return;
+  const ids = [];
+  for(const [tag, id] of Object.entries(Chat.tags).sort((a,b) => b[0].length - a[0].length)){
+    if(text.includes(tag)){ text = text.split(tag).join('@[' + id + ']'); ids.push(id); }
+  }
+  if(/@all\b/.test(text)) ids.push('all');
+  el('chatInput').value = ''; Chat.tags = {}; el('chatTags').classList.add('hide');
+  if(!await chatPost('text', text, ids)) return;
+  const me = (MY_NAME || 'Someone');
+  const targets = ids.includes('all') ? chatPlayers().map(p => p.id) : ids;
+  for(const to of new Set(targets)) chatPush(to, 'chat', me + ' mentioned you — ' + pushSafe(chatPlain(text)));
+}
+async function chatNudge(ids){
+  ids = ids.filter(id => id !== PLAYER_ID && !Chat.nudged.has(id)); if(!ids.length) return;
+  ids.forEach(id => Chat.nudged.add(id)); chatRender();
+  await chatPost('nudge', 'nudged ' + ids.map(id => '@[' + id + ']').join(' '), ids);
+  for(const to of ids) chatPush(to, 'nudge', (MY_NAME || 'Someone') + ' nudged you. Come back to the game.');
+}
+el('btnChat').onclick = ()=>{ Chat.open = true; chatRender(); chatMarkRead(); el('chatDlg').showModal(); el('chatInput').focus(); };
+el('chatClose').onclick = ()=> el('chatDlg').close();
+el('chatDlg').addEventListener('close', ()=>{ Chat.open = false; });
+el('chatPeek').onclick = ()=>{ el('chatPeek').classList.add('hide'); el('btnChat').onclick(); };
+el('chatSend').onclick = chatSend;
+el('chatInput').addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); chatSend(); } });
+/* typing @ shows the tag chips: @all and each player */
+el('chatInput').addEventListener('input', ()=>{
+  const v = el('chatInput').value, at = v.lastIndexOf('@'), box = el('chatTags');
+  const q = at >= 0 ? v.slice(at + 1) : null;
+  if(q === null || /\s/.test(q)){ box.classList.add('hide'); return; }
+  const ps = chatPlayers().filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
+  box.innerHTML = (q ? '' : '<button class="chipbtn tag" data-tag="all">@all</button>') +
+    ps.map(p => '<button class="chipbtn tag" data-tag="' + esc(p.id) + '">' + esc(p.name) + '</button>').join('');
+  box.classList.toggle('hide', !box.innerHTML);
+});
+el('chatTags').addEventListener('click', e=>{
+  const id = e.target.dataset && e.target.dataset.tag; if(!id) return;
+  const inp = el('chatInput'), v = inp.value, at = v.lastIndexOf('@');
+  const label = id === 'all' ? '@all' : '@' + chatName(id);
+  inp.value = v.slice(0, at) + label + ' ';
+  if(id !== 'all') Chat.tags[label] = id;
+  el('chatTags').classList.add('hide'); inp.focus();
+});
+el('chatNudge').addEventListener('click', e=>{
+  const id = e.target.dataset && e.target.dataset.nudge; if(!id) return;
+  chatNudge(id === '*' ? chatPlayers().map(p => p.id) : [id]);
+});
+
 /* boot: an invite link (#r=CODE) drops you straight into that table */
 (async function boot(){
   el('nameInput').value = MY_NAME;
@@ -1490,7 +1841,7 @@ document.addEventListener('keydown', e=>{
   const m = /r=([A-Za-z]{4})/.exec(location.hash || '');
   if(m){
     const code = m[1].toUpperCase();
-    await loadDict();
+    await Promise.all([loadDict(), loadRoots()]);
     Store.room = code; Store.online = true;
     await Store.pull();
     if(!Store.state){ toast('That game has expired'); location.hash=''; renderResume(); return; }
@@ -1504,14 +1855,14 @@ document.addEventListener('keydown', e=>{
         localStorage.setItem('ana_name', MY_NAME);
         el('nameDlg').close();
         await Store.mutate(joinState);
-        showGame(); render();
+        showGame(); render(); beat(); chatStart(code);
       };
       return;
     }
     await Store.mutate(joinState);
-    showGame(); render();
+    showGame(); render(); beat(); chatStart(code);
   }else{
-    loadDict();                                          // warm the dictionary while they read the home screen
+    loadDict(); loadRoots();                             // warm the word lists while they read the home screen
     renderResume();
   }
 })();
