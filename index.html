@@ -573,7 +573,7 @@ function returnToBag(st, word){
 function addLog(st, entry){
   st.seq = (st.seq||0) + 1;
   st.log.push(Object.assign({ id:st.seq, t:nowS() }, entry));
-  if(st.log.length > 40) st.log.splice(0, st.log.length - 40);
+  if(st.log.length > 500) st.log.splice(0, st.log.length - 500);   // a whole game; same cap as the app
 }
 const tilesOf = p => p.words.reduce((s,w)=> s + w.w.length, 0);
 
@@ -893,6 +893,13 @@ async function submitWord(){
   if(move.bad){
     el('claimErr').textContent = move.bad;
     el('claimInput').select();
+    // Log the refused try (the word and why), the same "try" entry the app
+    // writes. Without it a rejected word left no trace at all.
+    Store.mutate(st=>{
+      if(!st.claim || st.claim.pid !== PLAYER_ID) return false;
+      addLog(st, { type:'try', pid:PLAYER_ID, name:(st.players[PLAYER_ID]||{}).name || 'Player',
+                   word:w, why:move.bad });
+    }, { once:true });
     return;
   }
   closeClaim();
@@ -903,7 +910,7 @@ async function submitWord(){
     stole = null;
     if(!st.claim || st.claim.pid !== PLAYER_ID) return false;      // clock ran out / stolen
     const m = findMove(w, st);                                     // re-check on the FRESH table
-    if(m.bad){ st.claim = null; startPenalty(st, PLAYER_ID, m.bad); return; }
+    if(m.bad){ st.claim = null; startPenalty(st, PLAYER_ID, m.bad, w); return; }
     const mid = counts(st.mid);
     let used;
     if(m.type === 'new'){ used = spread(counts(w)); }
@@ -957,9 +964,11 @@ async function enqueueSteal(victim, src, into){
   }catch(e){ /* never let a notification break play */ }
 }
 
-function startPenalty(st, pid, why){
+function startPenalty(st, pid, why, word){
   const p = st.players[pid];
-  addLog(st, { type:'miss', pid, name:(p&&p.name)||'Player', why:why||'' });
+  // the word tried goes in the log, so a disputed miss can be looked up later
+  addLog(st, Object.assign({ type:'miss', pid, name:(p&&p.name)||'Player', why:why||'' },
+                           word ? { word } : {}));
   if(!p || !p.words.length) return;                     // nothing to lose
   st.penalty = { pid, deadline:nowS() + PENALTY_MS, why:why||'' };
 }
